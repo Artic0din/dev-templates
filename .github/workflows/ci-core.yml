@@ -143,13 +143,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number }}
-      REPO: ${{ github.repository }}
-      UPSTREAM_RESULT: ${{ needs.claude-review.result }}
     steps:
       - name: Evaluate gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          UPSTREAM_RESULT: ${{ needs.claude-review.result }}
         run: |
           # 1. Upstream fail-open: any non-success from claude-review passes the gate open.
           if [[ "$UPSTREAM_RESULT" != "success" ]]; then
