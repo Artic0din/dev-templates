@@ -1,8 +1,8 @@
 # dev-templates
 
-Discipline stack templates for Ryan's GitHub repos. v1.1.0 adopts the
-**three-agent workflow**: Claude Code builds → Codex reviews locally →
-GitHub Copilot reviews inline on the PR → CI verifies → Ryan merges.
+Discipline stack templates for Ryan's GitHub repos. Three-agent workflow:
+Claude Code builds → Codex reviews locally → GitHub Copilot reviews inline on
+the PR → CI verifies → Ryan merges.
 
 ## Layout
 
@@ -10,7 +10,9 @@ GitHub Copilot reviews inline on the PR → CI verifies → Ryan merges.
 dev-templates/
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci-core.yml              # reusable workflow (callers invoke)
+│   │   ├── ci-core-python.yml       # reusable: Python (uv + ruff + pyright + pytest)
+│   │   ├── ci-core-typescript.yml   # reusable: TS (pnpm or npm)
+│   │   ├── ci-core-swift.yml        # reusable: Swift (macos runner)
 │   │   ├── security-scan.yml        # gitleaks + dependency-review
 │   │   ├── docs-check.yml           # CHANGELOG modified gate
 │   │   ├── pr-title-check.yml       # conventional commit types
@@ -49,41 +51,57 @@ dev-templates/
 | Claude Code | `CLAUDE.md` | Build the change, local checks, draft PR |
 | Codex | `AGENTS.md` | Local review pre-PR: bugs, security, missing tests, scope creep |
 | GitHub Copilot | `.github/copilot-instructions.md` | Inline review on the PR (post-push) |
-| CI | `ci.yml` caller → `ci-core.yml` | Lint, typecheck, gitleaks, tests, codecov, rollup |
+| CI | `ci.yml` caller → `ci-core-{language}.yml` | Lint, typecheck, gitleaks, tests, codecov, rollup |
 | Ryan | — | Merge manually |
 
-Claude Code Action (gate) is **optional** in v1.1.0 and currently disabled
-pending a startup_failure bug in GitHub Actions when the gate uses
-`if: always()` / `if: !cancelled()` together with `needs:`.
+Claude Code Action (gate) is **optional** and currently out of scope (carries
+forward a `startup_failure` bug from v1.0.5; v1.4 territory).
 
 ## How it's used
 
-Each target repo's `.github/workflows/ci.yml` calls the reusable workflow:
+Each target repo's `.github/workflows/ci.yml` picks the right per-language
+reusable workflow:
 
 ```yaml
+# Python
 jobs:
   core:
-    uses: Artic0din/dev-templates/.github/workflows/ci-core.yml@v1
-    with:
-      language: typescript
+    uses: Artic0din/dev-templates/.github/workflows/ci-core-python.yml@v1
     secrets: inherit
 
-  ci-passed:
-    name: CI passed
-    if: always()
-    needs: [core]
-    runs-on: ubuntu-latest
-    steps:
-      - run: '[[ "${{ needs.core.result }}" == "success" ]] || exit 1'
+# TypeScript (pnpm)
+jobs:
+  core:
+    uses: Artic0din/dev-templates/.github/workflows/ci-core-typescript.yml@v1
+    with:
+      package_manager: pnpm
+    secrets: inherit
+
+# TypeScript (npm + monorepo subdirectory)
+jobs:
+  core:
+    uses: Artic0din/dev-templates/.github/workflows/ci-core-typescript.yml@v1
+    with:
+      working_directory: nesc-scheduler
+      package_manager: npm
+    secrets: inherit
+
+# Swift
+jobs:
+  core:
+    uses: Artic0din/dev-templates/.github/workflows/ci-core-swift.yml@v1
+    secrets: inherit
 ```
 
-Branch protection on `main` requires the literal `CI passed` check.
+Each caller adds a `ci-passed` rollup job that branch protection requires.
 
 ## Versioning
 
-- `v1.x.y` — specific releases (semver).
-- `v1` — floating major tag. Callers pin to this.
-- Breaking changes bump to `v2` and require explicit caller update.
+- `v1.x.y` — specific releases (semver). Immutable tags.
+- `v1.x.y-rc.N` — release candidates during validation. Immutable.
+- `v1` — floating major tag. Moves only after RC validates against real
+  callers. Callers in production repos pin to `@v1`.
+- Breaking changes bump to `v2` and require explicit caller migration.
 
 ## Scaffold a repo
 
@@ -93,11 +111,13 @@ Branch protection on `main` requires the literal `CI passed` check.
 
 From inside the target repo. Idempotent — safe to re-run. Migrates v1.0.x
 repos by renaming `.github/instructions/*.md` to `*.instructions.md` and
-stripping Cursor-only frontmatter fields.
+stripping Cursor-only frontmatter fields. Generates a caller `ci.yml` that
+invokes the right per-language reusable workflow.
 
 ## Pinning policy
 
-- **Allow-list (floating tag OK):** `anthropics/*`, `github/*`, `actions/*`, `codecov/*`, `astral-sh/*`, `pnpm/*`. Re-audit quarterly.
+- **Allow-list (floating tag OK):** `anthropics/*`, `github/*`, `actions/*`,
+  `codecov/*`, `astral-sh/*`, `pnpm/*`. Re-audit quarterly.
 - **Everything else: SHA-pin** with version comment.
 
 Reference: tj-actions/changed-files compromise (March 2025) — maintainer
@@ -105,34 +125,31 @@ trust is a continuous assessment, not a binary attribute.
 
 ## Language toolchain prerequisites
 
-Scaffold does NOT create toolchain config files (per Clarification G).
-Initialise the language toolchain before running `scaffold-discipline`:
+Scaffold does NOT create toolchain config files. Initialise the language
+toolchain before running `scaffold-discipline`:
 
 | Language | Prerequisite | Why |
 |---|---|---|
-| **Python** | `pyproject.toml` + uv | ci-core Python jobs use `uv sync --locked`. Repos with only `requirements.txt` will fail CI at the setup step. Migrate via `uv init` + `uv add`. |
-| **TypeScript / Node** | `package.json` + `pnpm-lock.yaml` **or** `package-lock.json` | ci-core supports both. Default is pnpm; set `package_manager: npm` in caller for npm repos. Yarn not supported — migrate to pnpm or npm. |
-| **Swift** | `Package.swift` or Xcode project | ci-core runs `swiftformat`, `swiftlint`, `swift build`, `swift test`. |
+| **Python** | `pyproject.toml` + uv | `ci-core-python.yml` runs `uv sync --locked`. Repos with only `requirements.txt` fail CI at the setup step. Migrate via `uv init` + `uv add`. |
+| **TypeScript / Node** | `package.json` + `pnpm-lock.yaml` **or** `package-lock.json` | `ci-core-typescript.yml` supports both. Default is pnpm; pass `package_manager: npm` in the caller for npm repos. Yarn not supported — migrate first. |
+| **Swift** | `Package.swift` or Xcode project | `ci-core-swift.yml` runs `swiftformat`, `swiftlint`, `swift test`. |
 
 Scaffold warns when these prerequisites are missing.
 
-### Monorepo support (v1.2.0+)
+## Monorepo support
 
-For repos where the project lives in a subdirectory (e.g. PLNR's `nesc-scheduler/`),
-set `working_directory` in the caller's `with:` block:
+For repos where the project lives in a subdirectory (e.g. PLNR's
+`nesc-scheduler/`), set `working_directory` in the caller's `with:` block:
 
 ```yaml
 core:
-  uses: Artic0din/dev-templates/.github/workflows/ci-core.yml@v1
+  uses: Artic0din/dev-templates/.github/workflows/ci-core-typescript.yml@v1
   with:
-    language: typescript
     working_directory: nesc-scheduler
     package_manager: npm
 ```
 
-Defaults: `working_directory: '.'`, `package_manager: 'pnpm'`. Both inputs are
-backward-compatible — existing callers (PowerBot, PriceHawk, PowerSync) keep
-working without changes.
+Default `working_directory: '.'` covers the common case.
 
 ## AGENTS.md convention
 
@@ -147,10 +164,19 @@ Two valid shapes:
 This keeps project-description AGENTS.md files (e.g. PriceHawk) intact
 while ensuring every repo carries the Codex role brief.
 
+## Codecov env-gate
+
+`codecov-action@v4` with an empty `${{ secrets.CODECOV_TOKEN }}` triggers
+GitHub Actions `startup_failure` before any job runs. All ci-core variants
+promote the secret to job-level `env` and gate the upload step on
+`env.CODECOV_TOKEN != ''`. Repos without the secret silently skip the
+upload; repos with it continue uploading.
+
 ## Phase 4 rollout order (planned)
 
-1. **PowerSync** (Python, fork) — Python-path validation. Caution re: upstream constraints.
-2. **PLNR** (TypeScript) — Next.js / Prisma.
+1. **PowerSync** (Python, fork) — Python-path validation. Caution re:
+   upstream constraints.
+2. **PLNR** (TypeScript) — Next.js / Prisma. Will recreate on v1.3.0.
 3. **Arsenal** (TypeScript) — React/Vite + Express.
 4. **KiloWasps** (TypeScript) — Next.js + SQLite + Recharts. Needs remote first.
 5. **Amprage**, **SpoolWise** (Swift) — after TypeScript path settles.

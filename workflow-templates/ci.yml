@@ -1,8 +1,8 @@
 name: CI
 
-# Editable caller for the reusable ci-core workflow. Owns the literal
+# Editable caller for the reusable ci-core workflows (v1.3.0+).
+# Pick ONE of the per-language reusable workflows. Owns the literal
 # "CI passed" rollup so branch protection has a stable check name.
-# Add repo-specific jobs alongside `core:`; add them to `ci-passed.needs`.
 
 on:
   pull_request:
@@ -11,23 +11,23 @@ on:
 
 jobs:
   core:
-    uses: Artic0din/dev-templates/.github/workflows/ci-core.yml@v1
-    with:
-      language: typescript      # python | swift | typescript | node
-      # Uncomment + set for monorepos where the project lives in a subdirectory:
-      # working_directory: nesc-scheduler
-      # Set for repos using package-lock.json instead of pnpm-lock.yaml:
-      # package_manager: npm
-    secrets: inherit
+    # --- Python (default for this template) ---
+    uses: Artic0din/dev-templates/.github/workflows/ci-core-python.yml@v1
+    # with:
+    #   working_directory: .       # Set for monorepos.
 
-  # ==== Repo-specific jobs go here ====
-  # Example:
-  # integration:
-  #   if: github.event_name == 'pull_request'
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - run: ./tests/integration.sh
+    # --- TypeScript (uncomment to use) ---
+    # uses: Artic0din/dev-templates/.github/workflows/ci-core-typescript.yml@v1
+    # with:
+    #   working_directory: nesc-scheduler   # monorepo subdirectory
+    #   package_manager: npm                # pnpm (default) | npm
+
+    # --- Swift (uncomment to use) ---
+    # uses: Artic0din/dev-templates/.github/workflows/ci-core-swift.yml@v1
+    # with:
+    #   working_directory: .
+
+    secrets: inherit
 
   ci-passed:
     name: CI passed

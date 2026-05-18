@@ -58,7 +58,8 @@ Columns:
 | v1.2.1 | 2026-05-18 | working-directory moved to per-step (not `defaults.run.working-directory`) for reusable-workflow compatibility. |
 | v1.2.2 | 2026-05-18 | Restored full ci-core after cache clears. |
 | ⚠ v1.2.3 (transition) | 2026-05-18 | TS+npm + codecov env-gate only. Python + pnpm + Swift paths dropped. **DO NOT USE as baseline.** Transitional state during bisection of multi-path startup_failure. Next stable baseline is v1.3.0 (per-language ci-core split). See `BUILDER-BRIEF-v1.3.0.md`. |
-| **v1.3.0** | **planned** | **Per-language ci-core split.** `ci-core-python.yml`, `ci-core-typescript.yml`, `ci-core-swift.yml`. Removes multi-path conditional complexity. Carries forward codecov env-gate fix. See `BUILDER-BRIEF-v1.3.0.md` for full plan. |
+| v1.3.0-rc.1 | 2026-05-18 | **Per-language ci-core split.** `ci-core-python.yml`, `ci-core-typescript.yml`, `ci-core-swift.yml`. Monolithic `ci-core.yml` deleted. Caller template + scaffold-discipline updated. Codecov env-gate carried forward in Python + TypeScript. RC tag — `v1` not yet moved. Awaiting real-caller validation per criterion #10. |
+| **v1.3.0** | **planned** | Moves after RC validates against real callers (PowerBot for TS+pnpm, PowerSync for Python; TS+npm + Swift need test repos). |
 
 ---
 

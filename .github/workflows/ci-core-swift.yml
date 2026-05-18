@@ -1,0 +1,44 @@
+name: CI core (swift)
+
+# Per-language reusable workflow. Callers (each repo's ci.yml) own the
+# literal "CI passed" rollup; this file exposes individual jobs only.
+#
+# Assumes the caller repo has Package.swift or an Xcode project at
+# working_directory.
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Working directory for run commands (default: repo root). Use for monorepos.'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swiftformat swiftlint
+      - working-directory: ${{ inputs.working_directory }}
+        run: swiftformat --lint .
+      - working-directory: ${{ inputs.working_directory }}
+        run: swiftlint
+
+  tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - working-directory: ${{ inputs.working_directory }}
+        run: swift test --enable-code-coverage
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

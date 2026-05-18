@@ -1,0 +1,156 @@
+name: CI core (typescript)
+
+# Per-language reusable workflow. Callers (each repo's ci.yml) own the
+# literal "CI passed" rollup; this file exposes individual jobs only.
+#
+# Assumes the caller repo has package.json + lockfile (pnpm-lock.yaml or
+# package-lock.json) at working_directory. Yarn not supported.
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Working directory for run commands (default: repo root). Use for monorepos.'
+        required: false
+        type: string
+        default: '.'
+      package_manager:
+        description: 'Package manager: pnpm (default) | npm.'
+        required: false
+        type: string
+        default: 'pnpm'
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm path
+      - if: inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm lint
+
+      # npm path
+      - if: inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm exec tsc --noEmit
+
+      - if: inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npx tsc --noEmit
+
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      # See ci-core-python.yml — codecov env-gate to dodge startup_failure
+      # when CODECOV_TOKEN is unset.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            pnpm test:coverage
+          else
+            pnpm test
+          fi
+
+      - if: inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            npm run test:coverage
+          else
+            npm test
+          fi
+
+      - if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
