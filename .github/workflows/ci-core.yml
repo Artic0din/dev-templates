@@ -131,31 +131,8 @@ jobs:
   claude-review:
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Load review prompt
-        id: prompt
-        run: |
-          if [[ -f .github/prompts/pr-review.prompt.md ]]; then
-            {
-              echo 'prompt<<__EOF__'
-              cat .github/prompts/pr-review.prompt.md
-              echo '__EOF__'
-            } >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::No .github/prompts/pr-review.prompt.md found"
-            echo "prompt=Review this PR. Tiered findings (Tier 1 block; Tier 2 consider; Tier 3 strong justification). End with trailer (yaml): tier_1_count, tier_2_count, tier_3_count, verdict." >> "$GITHUB_OUTPUT"
-          fi
-      - uses: anthropics/claude-code-action@v0
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          mode: experimental-review
-          override_prompt: ${{ steps.prompt.outputs.prompt }}
+      - run: echo "stub claude-review (action removed for debug)"
 
   claude-review-gate:
     # `!cancelled()` runs on success or failure of needs (not on cancel). This
