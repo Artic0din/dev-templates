@@ -135,21 +135,9 @@ jobs:
       - run: echo "minimal claude-review stub"
 
   claude-review-gate:
-    if: always() && github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request'
     needs: claude-review
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
     steps:
-      - name: Handle upstream claude-review result
-        id: upstream
-        run: |
-          RESULT="${{ needs.claude-review.result }}"
-          case "$RESULT" in
-            success) echo "::notice::claude-review succeeded" ;;
-            *)
-              echo "::warning::claude-review did not succeed ($RESULT) — passing open"
-              echo "skip_gate=true" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+      - run: echo "result was ${{ needs.claude-review.result }}"
 
