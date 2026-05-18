@@ -34,7 +34,18 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
-echo "→ scaffolding $LANGUAGE discipline v1.1.0 into $REPO_ROOT"
+
+# Language-specific prerequisite checks. Scaffold does NOT create toolchain
+# files (per Clarification G) but warns when they're missing so the user can
+# initialise the toolchain before CI runs.
+if [[ "$LANGUAGE" == "python" && ! -f pyproject.toml ]]; then
+  echo "⚠ python: no pyproject.toml found. The ci-core Python jobs use uv;"
+  echo "  CI lint/typecheck/tests will fail at \`uv sync --locked\` until you"
+  echo "  initialise the project (\`uv init\` or migrate from requirements.txt)."
+  echo "  Scaffold continues — fix this before opening the PR for green CI."
+fi
+
+echo "→ scaffolding $LANGUAGE discipline v1.1.x into $REPO_ROOT"
 
 mkdir -p .github/workflows .github/instructions .github/prompts
 
@@ -89,8 +100,8 @@ else
   echo "    .github/workflows/ci.yml (exists, skipped)"
 fi
 
+# Editable files except AGENTS.md (handled below with append-if-missing).
 for src_dst in \
-  "templates/AGENTS.md:AGENTS.md" \
   "templates/CLAUDE.md:CLAUDE.md" \
   "templates/CONTRIBUTING.md:CONTRIBUTING.md" \
   "templates/copilot-instructions.md:.github/copilot-instructions.md"; do
@@ -103,6 +114,19 @@ for src_dst in \
     echo "    $dst (exists, skipped)"
   fi
 done
+
+# AGENTS.md: create full template if missing; otherwise append Codex section
+# if not already present. Keeps existing project content intact.
+if [[ ! -f AGENTS.md ]]; then
+  cp "$TEMPLATES/templates/AGENTS.md" AGENTS.md
+  echo "    AGENTS.md (created from full template)"
+elif ! grep -q '^## Codex Review Role' AGENTS.md; then
+  echo "" >> AGENTS.md
+  cat "$TEMPLATES/templates/AGENTS-codex-section.md" >> AGENTS.md
+  echo "    AGENTS.md (Codex Review Role section appended)"
+else
+  echo "    AGENTS.md (Codex section present, skipped)"
+fi
 
 # --- ai-review-override label provisioning ---
 

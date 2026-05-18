@@ -102,3 +102,42 @@ stripping Cursor-only frontmatter fields.
 
 Reference: tj-actions/changed-files compromise (March 2025) — maintainer
 trust is a continuous assessment, not a binary attribute.
+
+## Language toolchain prerequisites
+
+Scaffold does NOT create toolchain config files (per Clarification G).
+Initialise the language toolchain before running `scaffold-discipline`:
+
+| Language | Prerequisite | Why |
+|---|---|---|
+| **Python** | `pyproject.toml` + uv | ci-core Python jobs use `uv sync --locked`. Repos with only `requirements.txt` will fail CI at the setup step. Migrate via `uv init` + `uv add`. |
+| **TypeScript / Node** | `package.json` + pnpm | ci-core uses `pnpm install --frozen-lockfile`. Repos must commit `pnpm-lock.yaml`. |
+| **Swift** | `Package.swift` or Xcode project | ci-core runs `swiftformat`, `swiftlint`, `swift build`, `swift test`. |
+
+Scaffold prints a warning if a Python repo has no `pyproject.toml`.
+
+## AGENTS.md convention
+
+Two valid shapes:
+
+1. **New repo** — scaffold copies the full template (Codex role + nothing else).
+2. **Existing AGENTS.md** (project overview, etc.) — scaffold appends a
+   `## Codex Review Role` section if not already present. Existing content
+   is preserved. The Codex section can be hand-edited; scaffold only adds
+   it if missing on re-run.
+
+This keeps project-description AGENTS.md files (e.g. PriceHawk) intact
+while ensuring every repo carries the Codex role brief.
+
+## Phase 4 rollout order (planned)
+
+1. **GridWise** (Python, large active) — validate Python path under heavier use.
+2. **PowerSync** (Python, fork) — caution re: upstream constraints.
+3. **PLNR** (TypeScript) — Next.js / Prisma.
+4. **Arsenal** (TypeScript) — React/Vite + Express.
+5. **KiloWasps** (TypeScript) — Next.js + SQLite + Recharts. Needs remote first.
+6. **Amprage**, **SpoolWise** (Swift) — after TypeScript path settles.
+
+**Excluded** from the standard scaffold:
+- **Oversight** (Power BI) — no CI pattern fits.
+- **Watchbill** (HTML + Excel/VBA) — no CI pattern fits.
