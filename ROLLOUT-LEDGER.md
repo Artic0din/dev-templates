@@ -24,8 +24,13 @@ Columns:
 
 | Repo | Baseline | PR | CI | Stack issues | Repo issues | Next action |
 |---|---|---|---|---|---|---|
-| `Artic0din/GridWise` (bootstrap) | v1.1.5 (policy reference) | [#176](https://github.com/Artic0din/GridWise/pull/176) | pending | None — bootstrap PR is uv init only, no stack files | Clean-slate state (commit `975c7aa` stripped coordination layer). Bootstrap PR adds `pyproject.toml` + `uv.lock` + `tests/test_smoke.py` + `AGENTS.md` + `CHANGELOG.md` so the scaffold can wire in. | Merge #176, THEN open scaffold PR (`scaffold-discipline python` on a fresh branch off main). |
-| `Artic0din/GridWise` (scaffold) | — | — | — | — | — | Blocked on #176 merge. |
+| `Artic0din/GridWise` | — | [#176 CLOSED](https://github.com/Artic0din/GridWise/pull/176) | — | — | No longer actively developed; clean-slate stub since 2026-05-04. Bootstrap PR closed without merge. | **Dropped from rollout.** Reopen #176 if GridWise development resumes. |
+
+## Excluded from rollout
+
+- **`Artic0din/GridWise`** — no longer actively developed (clean-slate stub).
+- **Oversight** (Power BI) — no CI pattern fits.
+- **Watchbill** (HTML + Excel/VBA) — no CI pattern fits.
 
 ---
 

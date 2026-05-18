@@ -131,13 +131,13 @@ while ensuring every repo carries the Codex role brief.
 
 ## Phase 4 rollout order (planned)
 
-1. **GridWise** (Python, large active) — validate Python path under heavier use.
-2. **PowerSync** (Python, fork) — caution re: upstream constraints.
-3. **PLNR** (TypeScript) — Next.js / Prisma.
-4. **Arsenal** (TypeScript) — React/Vite + Express.
-5. **KiloWasps** (TypeScript) — Next.js + SQLite + Recharts. Needs remote first.
-6. **Amprage**, **SpoolWise** (Swift) — after TypeScript path settles.
+1. **PowerSync** (Python, fork) — Python-path validation. Caution re: upstream constraints.
+2. **PLNR** (TypeScript) — Next.js / Prisma.
+3. **Arsenal** (TypeScript) — React/Vite + Express.
+4. **KiloWasps** (TypeScript) — Next.js + SQLite + Recharts. Needs remote first.
+5. **Amprage**, **SpoolWise** (Swift) — after TypeScript path settles.
 
 **Excluded** from the standard scaffold:
+- **GridWise** — no longer actively developed (clean-slate stub since 2026-05-04).
 - **Oversight** (Power BI) — no CI pattern fits.
 - **Watchbill** (HTML + Excel/VBA) — no CI pattern fits.
