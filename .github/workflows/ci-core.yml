@@ -35,7 +35,6 @@ jobs:
       - if: inputs.language == 'python'
         uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
-        working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
@@ -64,7 +63,6 @@ jobs:
       - if: inputs.language == 'python'
         uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
-        working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
@@ -93,7 +91,6 @@ jobs:
       - if: inputs.language == 'python'
         uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
-        working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
