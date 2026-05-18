@@ -143,67 +143,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      UPSTREAM_RESULT: ${{ needs.claude-review.result }}
     steps:
-      - name: Handle upstream claude-review result
-        id: upstream
+      - name: Evaluate gate
         run: |
-          RESULT="${{ needs.claude-review.result }}"
-          case "$RESULT" in
-            success) echo "::notice::claude-review succeeded" ;;
-            *)
-              echo "::warning::claude-review did not succeed ($RESULT) — passing open"
-              echo "skip_gate=true" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          # 1. Upstream fail-open: any non-success from claude-review passes the gate open.
+          if [[ "$UPSTREAM_RESULT" != "success" ]]; then
+            echo "::warning::claude-review did not succeed ($UPSTREAM_RESULT) — gate passes open"
+            exit 0
+          fi
 
-      - name: Check for override label
-        if: steps.upstream.outputs.skip_gate != 'true'
-        id: override
-        run: |
+          # 2. Override label: ai-review-override bypasses the gate.
           if gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name' \
               | grep -q '^ai-review-override$'; then
-            echo "override=true" >> "$GITHUB_OUTPUT"
             echo "::warning::ai-review-override label set — gate bypassed"
+            exit 0
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
 
-      - name: Find Claude review comment
-        if: steps.upstream.outputs.skip_gate != 'true' && steps.override.outputs.override != 'true'
-        run: |
+          # 3. Find Claude review comment with trailer.
           COMMENT=$(gh pr view "$PR" --repo "$REPO" --json comments \
-            --jq '[.comments[]
-                    | select(.body | contains("trailer:")
-                              and contains("verdict:"))]
-                   | last | .body')
+            --jq '[.comments[] | select(.body | contains("trailer:") and contains("verdict:"))] | last | .body')
 
           if [[ -z "$COMMENT" || "$COMMENT" == "null" ]]; then
             echo "::warning::No Claude review trailer found — passing open"
-            : > /tmp/claude-comment.md
-          else
-            echo "$COMMENT" > /tmp/claude-comment.md
+            exit 0
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
 
-      - name: Parse trailer and decide
-        if: steps.upstream.outputs.skip_gate != 'true' && steps.override.outputs.override != 'true'
-        run: |
-          VERDICT=$(awk 'BEGIN{IGNORECASE=1}
-            /^[[:space:]]*```yaml[[:space:]]*$/,/^[[:space:]]*```[[:space:]]*$/' \
-            /tmp/claude-comment.md \
+          # 4. Extract verdict from the yaml code fence.
+          printf '%s\n' "$COMMENT" > /tmp/c.md
+          FENCE='```'
+          VERDICT=$(awk -v f="^[[:space:]]*${FENCE}yaml[[:space:]]*$" -v c="^[[:space:]]*${FENCE}[[:space:]]*$" \
+            'BEGIN{IGNORECASE=1} $0 ~ f, $0 ~ c { print }' /tmp/c.md \
             | grep -E '^\s*verdict:' | tail -1 \
-            | sed -E 's/.*verdict:\s*"?([a-z_]+)"?.*/\1/')
-
-          echo "::group::Raw trailer text"
-          awk 'BEGIN{IGNORECASE=1}
-            /^[[:space:]]*```yaml[[:space:]]*$/,/^[[:space:]]*```[[:space:]]*$/' \
-            /tmp/claude-comment.md || true
-          echo "::endgroup::"
+            | sed -E 's/.*verdict:\s*"?([a-z_]+)"?.*/\1/' || true)
 
           case "$VERDICT" in
             block_merge)
@@ -213,7 +189,7 @@ jobs:
             ship_it|ship_with_notes)
               echo "::notice::Verdict: $VERDICT — gate passes"
               ;;
-            ""|*)
+            *)
               echo "::warning::Verdict missing or unrecognised ('$VERDICT') — passing open"
               ;;
           esac
