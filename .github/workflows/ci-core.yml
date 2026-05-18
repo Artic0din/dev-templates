@@ -1,11 +1,34 @@
 name: CI core
 
+# Reusable workflow. Callers (each repo's ci.yml) own the literal "CI passed"
+# rollup; this file exposes individual jobs only.
+#
+# v1.2.0 inputs:
+#   - working_directory: default '.', set for monorepos (e.g. PLNR's nesc-scheduler).
+#   - package_manager:   default 'pnpm', set 'npm' for repos using package-lock.json.
+#
+# Pinning policy (Addition A):
+#   - Allow-list (floating tag): anthropics/*, github/*, actions/*, codecov/*,
+#     astral-sh/*, pnpm/*. Re-audit quarterly.
+#   - Everything else: SHA-pin with version comment.
+
 on:
   workflow_call:
     inputs:
       language:
+        description: 'Language: python | swift | typescript | node'
         required: true
         type: string
+      working_directory:
+        description: 'Working directory for run commands (default: repo root). Use for monorepos.'
+        required: false
+        type: string
+        default: '.'
+      package_manager:
+        description: 'TS/Node package manager: pnpm | npm (default: pnpm).'
+        required: false
+        type: string
+        default: 'pnpm'
     secrets:
       ANTHROPIC_API_KEY:
         required: false
@@ -15,18 +38,18 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
     permissions:
       contents: read
-      # reviewdog (Python lint) posts inline review comments on PRs. Without
-      # `pull-requests: write` it dumps rdjson to stdout + exits 1, losing
-      # the inline UX. Other lint paths (pnpm, swiftlint) don't need this
-      # but the permission is harmless when unused.
       pull-requests: write
     env:
       REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
+      # --- Python ---
       - if: inputs.language == 'python'
         uses: astral-sh/setup-uv@v3
       - if: inputs.language == 'python'
@@ -45,18 +68,33 @@ jobs:
       - if: inputs.language == 'python'
         run: uv run ruff format --check
 
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      # --- TS / Node (pnpm) ---
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         uses: pnpm/action-setup@v3
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         run: pnpm install --frozen-lockfile
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         run: pnpm lint
 
+      # --- TS / Node (npm) ---
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        run: npm ci
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        run: npm run lint
+
+      # --- Swift ---
       - if: inputs.language == 'swift'
         run: brew install swiftformat swiftlint
       - if: inputs.language == 'swift'
@@ -66,6 +104,9 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v4
 
@@ -76,17 +117,31 @@ jobs:
       - if: inputs.language == 'python'
         run: uv run pyright
 
-      - if: inputs.language == 'typescript'
+      # TS pnpm
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
         uses: pnpm/action-setup@v3
-      - if: inputs.language == 'typescript'
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
-      - if: inputs.language == 'typescript'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
         run: pnpm install --frozen-lockfile
-      - if: inputs.language == 'typescript'
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
         run: pnpm exec tsc --noEmit
+
+      # TS npm
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        run: npm ci
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        run: npx tsc --noEmit
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -100,6 +155,9 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v4
 
@@ -110,21 +168,40 @@ jobs:
       - if: inputs.language == 'python'
         run: uv run pytest --cov --cov-report=xml --cov-branch
 
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      # TS/Node pnpm
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         uses: pnpm/action-setup@v3
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         run: pnpm install --frozen-lockfile
-      - if: inputs.language == 'typescript' || inputs.language == 'node'
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
         run: |
           if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
             pnpm test:coverage
           else
             pnpm test
+          fi
+
+      # TS/Node npm
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        run: npm ci
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            npm run test:coverage
+          else
+            npm test
           fi
 
       - if: inputs.language == 'swift'
@@ -148,4 +225,3 @@ jobs:
   # When fixed, restore the claude-review and claude-review-gate jobs from
   # tag v1.0.4 history.
   # ============================================================================
-

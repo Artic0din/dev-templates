@@ -45,6 +45,29 @@ if [[ "$LANGUAGE" == "python" && ! -f pyproject.toml ]]; then
   echo "  Scaffold continues — fix this before opening the PR for green CI."
 fi
 
+# TS/Node: detect package manager + hint at caller config.
+if [[ "$LANGUAGE" == "typescript" || "$LANGUAGE" == "node" ]]; then
+  if [[ -f pnpm-lock.yaml ]]; then
+    DETECTED_PM=pnpm
+  elif [[ -f package-lock.json ]]; then
+    DETECTED_PM=npm
+  elif [[ -f yarn.lock ]]; then
+    DETECTED_PM=yarn
+  else
+    DETECTED_PM=none
+  fi
+  if [[ "$DETECTED_PM" == "yarn" ]]; then
+    echo "⚠ ${LANGUAGE}: yarn detected. ci-core supports pnpm + npm only."
+    echo "  Migrate to pnpm or npm before opening the PR for green CI."
+  elif [[ "$DETECTED_PM" == "none" ]]; then
+    echo "⚠ ${LANGUAGE}: no lockfile found (pnpm-lock.yaml or package-lock.json)."
+    echo "  Run \`pnpm install\` or \`npm install\` to generate a lockfile first."
+  elif [[ "$DETECTED_PM" == "npm" ]]; then
+    echo "→ ${LANGUAGE}: detected npm. Set \`package_manager: npm\` in caller ci.yml's"
+    echo "  \`with:\` block (default is pnpm)."
+  fi
+fi
+
 echo "→ scaffolding $LANGUAGE discipline v1.1.x into $REPO_ROOT"
 
 mkdir -p .github/workflows .github/instructions .github/prompts

@@ -111,10 +111,28 @@ Initialise the language toolchain before running `scaffold-discipline`:
 | Language | Prerequisite | Why |
 |---|---|---|
 | **Python** | `pyproject.toml` + uv | ci-core Python jobs use `uv sync --locked`. Repos with only `requirements.txt` will fail CI at the setup step. Migrate via `uv init` + `uv add`. |
-| **TypeScript / Node** | `package.json` + pnpm | ci-core uses `pnpm install --frozen-lockfile`. Repos must commit `pnpm-lock.yaml`. |
+| **TypeScript / Node** | `package.json` + `pnpm-lock.yaml` **or** `package-lock.json` | ci-core supports both. Default is pnpm; set `package_manager: npm` in caller for npm repos. Yarn not supported — migrate to pnpm or npm. |
 | **Swift** | `Package.swift` or Xcode project | ci-core runs `swiftformat`, `swiftlint`, `swift build`, `swift test`. |
 
-Scaffold prints a warning if a Python repo has no `pyproject.toml`.
+Scaffold warns when these prerequisites are missing.
+
+### Monorepo support (v1.2.0+)
+
+For repos where the project lives in a subdirectory (e.g. PLNR's `nesc-scheduler/`),
+set `working_directory` in the caller's `with:` block:
+
+```yaml
+core:
+  uses: Artic0din/dev-templates/.github/workflows/ci-core.yml@v1
+  with:
+    language: typescript
+    working_directory: nesc-scheduler
+    package_manager: npm
+```
+
+Defaults: `working_directory: '.'`, `package_manager: 'pnpm'`. Both inputs are
+backward-compatible — existing callers (PowerBot, PriceHawk, PowerSync) keep
+working without changes.
 
 ## AGENTS.md convention
 

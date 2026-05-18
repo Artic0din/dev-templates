@@ -14,6 +14,10 @@ jobs:
     uses: Artic0din/dev-templates/.github/workflows/ci-core.yml@v1
     with:
       language: typescript      # python | swift | typescript | node
+      # Uncomment + set for monorepos where the project lives in a subdirectory:
+      # working_directory: nesc-scheduler
+      # Set for repos using package-lock.json instead of pnpm-lock.yaml:
+      # package_manager: npm
     secrets: inherit
 
   # ==== Repo-specific jobs go here ====
