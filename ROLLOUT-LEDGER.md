@@ -52,7 +52,8 @@ Columns:
 | v1.1.3 | 2026-05-18 | version-drift uses `if/then/fi` instead of `[[ ]] && cmd` (set -e safety) |
 | v1.1.4 | 2026-05-18 | version-drift tolerates empty `find \| grep` pipeline (pipefail) |
 | v1.1.5 | 2026-05-18 | Locked baseline. Python prereq warning, AGENTS.md append behavior, Phase 4 order documented |
-| **v1.1.6** | **2026-05-18** | **Lint job permissions.** Added `pull-requests: write` so reviewdog can post inline annotations. Discovered via PowerSync #234 |
+| v1.1.6 | 2026-05-18 | Lint job permissions. Added `pull-requests: write` so reviewdog can post inline annotations. Discovered via PowerSync #234 |
+| **v1.2.0** | **2026-05-18** | **Monorepo + npm support.** Added `working_directory` (default `.`) and `package_manager` (default `pnpm`, accepts `npm`) inputs to ci-core. Backward-compatible. Discovered via PLNR Phase 4 inspection — all 3 active TS app repos use npm; PLNR is monorepo with app in `nesc-scheduler/`. |
 
 ---
 
