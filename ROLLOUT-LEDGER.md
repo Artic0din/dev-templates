@@ -26,7 +26,7 @@ Columns:
 |---|---|---|---|---|---|---|
 | `Artic0din/GridWise` | — | [#176 CLOSED](https://github.com/Artic0din/GridWise/pull/176) | — | — | No longer actively developed; clean-slate stub since 2026-05-04. Bootstrap PR closed without merge. | **Dropped from rollout.** Reopen #176 if GridWise development resumes. |
 | `Artic0din/PowerSync` (bootstrap, fork-only) | v1.1.5 (policy ref) | [#233](https://github.com/Artic0din/PowerSync/pull/233) | pending | None — bootstrap is uv init only | HACS integration with no Python tooling. Bootstrap PR adds `pyproject.toml` (deps mirror manifest.json: aiohttp, aemo-to-tariff, cryptography, goodwe, protobuf, scipy), `uv.lock` (32 packages), `CHANGELOG.md` (fork-only). 487 tests collect locally. | Merge #233 to fork's `main`, THEN open fork-only scaffold PR. Base = `Artic0din/PowerSync:main`, never upstream. |
-| `Artic0din/PowerSync` (scaffold, fork-only) | — | — | — | — | — | Blocked on #233 merge. |
+| `Artic0din/PowerSync` (scaffold, fork-only) | v1.1.5 | [#234](https://github.com/Artic0din/PowerSync/pull/234) | partial | Lint job lacks `pull-requests: write` permission → reviewdog can't post inline annotations, dumps rdjson to stdout + exits 1. Functionality intact (correctly fails on real findings), UX degraded. Optional v1.1.6 fix. | Repo lint findings (unsorted imports, unused imports, `datetime.UTC` upgrades) — real ruff issues, fix in separate PR. Pyright can't resolve `homeassistant.*` — needs `homeassistant` in pyproject dev group. Dependency-review: moderate-severity advisory in a dep (bump needed). | Stack validation PASS: 487 tests pass, all 4 managed workflows fire, version-drift correct, CR cleanup ran, AGENTS.md created. Repo follow-up: lint + pyright + deps. |
 
 ## Excluded from rollout
 
