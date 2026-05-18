@@ -131,13 +131,113 @@ jobs:
   claude-review:
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - run: echo "minimal claude-review stub"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Load review prompt
+        id: prompt
+        run: |
+          if [[ -f .github/prompts/pr-review.prompt.md ]]; then
+            {
+              echo 'prompt<<__EOF__'
+              cat .github/prompts/pr-review.prompt.md
+              echo '__EOF__'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No .github/prompts/pr-review.prompt.md found"
+            echo "prompt=Review this PR. Tiered findings (Tier 1 block; Tier 2 consider; Tier 3 strong justification). End with trailer (yaml): tier_1_count, tier_2_count, tier_3_count, verdict." >> "$GITHUB_OUTPUT"
+          fi
+      - uses: anthropics/claude-code-action@v0
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: experimental-review
+          override_prompt: ${{ steps.prompt.outputs.prompt }}
 
   claude-review-gate:
-    if: github.event_name == 'pull_request'
+    # `!cancelled()` runs on success or failure of needs (not on cancel). This
+    # preserves fail-open behaviour when claude-review fails (API outage) while
+    # avoiding the workflow-startup_failure GitHub throws on `always()` + needs.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     needs: claude-review
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
     steps:
-      - run: echo "result was ${{ needs.claude-review.result }}"
+      - name: Handle upstream claude-review result
+        id: upstream
+        run: |
+          RESULT="${{ needs.claude-review.result }}"
+          case "$RESULT" in
+            success) echo "::notice::claude-review succeeded" ;;
+            *)
+              echo "::warning::claude-review did not succeed ($RESULT) — passing open"
+              echo "skip_gate=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Check for override label
+        if: steps.upstream.outputs.skip_gate != 'true'
+        id: override
+        run: |
+          if gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name' \
+              | grep -q '^ai-review-override$'; then
+            echo "override=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::ai-review-override label set — gate bypassed"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+
+      - name: Find Claude review comment
+        if: steps.upstream.outputs.skip_gate != 'true' && steps.override.outputs.override != 'true'
+        run: |
+          COMMENT=$(gh pr view "$PR" --repo "$REPO" --json comments \
+            --jq '[.comments[]
+                    | select(.body | contains("trailer:")
+                              and contains("verdict:"))]
+                   | last | .body')
+
+          if [[ -z "$COMMENT" || "$COMMENT" == "null" ]]; then
+            echo "::warning::No Claude review trailer found — passing open"
+            : > /tmp/claude-comment.md
+          else
+            echo "$COMMENT" > /tmp/claude-comment.md
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+
+      - name: Parse trailer and decide
+        if: steps.upstream.outputs.skip_gate != 'true' && steps.override.outputs.override != 'true'
+        run: |
+          VERDICT=$(awk 'BEGIN{IGNORECASE=1}
+            /^[[:space:]]*```yaml[[:space:]]*$/,/^[[:space:]]*```[[:space:]]*$/' \
+            /tmp/claude-comment.md \
+            | grep -E '^\s*verdict:' | tail -1 \
+            | sed -E 's/.*verdict:\s*"?([a-z_]+)"?.*/\1/')
+
+          echo "::group::Raw trailer text"
+          awk 'BEGIN{IGNORECASE=1}
+            /^[[:space:]]*```yaml[[:space:]]*$/,/^[[:space:]]*```[[:space:]]*$/' \
+            /tmp/claude-comment.md || true
+          echo "::endgroup::"
+
+          case "$VERDICT" in
+            block_merge)
+              echo "::error::Tier 1 findings present — must address before merge"
+              exit 1
+              ;;
+            ship_it|ship_with_notes)
+              echo "::notice::Verdict: $VERDICT — gate passes"
+              ;;
+            ""|*)
+              echo "::warning::Verdict missing or unrecognised ('$VERDICT') — passing open"
+              ;;
+          esac
 
