@@ -125,7 +125,9 @@ echo "  cleanup:"
 for f in .coderabbit.yaml .sourcery.yaml \
          .github/workflows/dual-loop-review.yml \
          .github/workflows/claude-assistant.yml \
-         .github/workflows/coderabbit.yml; do
+         .github/workflows/coderabbit.yml \
+         .github/workflows/coderabbit-nitpicks.yml \
+         .github/workflows/claude-review.yml; do
   if [[ -f "$f" ]]; then
     rm -f "$f"
     echo "    removed $f"
