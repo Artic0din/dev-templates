@@ -128,69 +128,17 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  claude-review:
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "stub claude-review (action removed for debug)"
-
-  claude-review-gate:
-    # `!cancelled()` runs on success or failure of needs (not on cancel). This
-    # preserves fail-open behaviour when claude-review fails (API outage) while
-    # avoiding the workflow-startup_failure GitHub throws on `always()` + needs.
-    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-    needs: claude-review
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    steps:
-      - name: Evaluate gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-          UPSTREAM_RESULT: ${{ needs.claude-review.result }}
-        run: |
-          # 1. Upstream fail-open: any non-success from claude-review passes the gate open.
-          if [[ "$UPSTREAM_RESULT" != "success" ]]; then
-            echo "::warning::claude-review did not succeed ($UPSTREAM_RESULT) — gate passes open"
-            exit 0
-          fi
-
-          # 2. Override label: ai-review-override bypasses the gate.
-          if gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name' \
-              | grep -q '^ai-review-override$'; then
-            echo "::warning::ai-review-override label set — gate bypassed"
-            exit 0
-          fi
-
-          # 3. Find Claude review comment with trailer.
-          COMMENT=$(gh pr view "$PR" --repo "$REPO" --json comments \
-            --jq '[.comments[] | select(.body | contains("trailer:") and contains("verdict:"))] | last | .body')
-
-          if [[ -z "$COMMENT" || "$COMMENT" == "null" ]]; then
-            echo "::warning::No Claude review trailer found — passing open"
-            exit 0
-          fi
-
-          # 4. Extract verdict from the yaml code fence.
-          printf '%s\n' "$COMMENT" > /tmp/c.md
-          FENCE='```'
-          VERDICT=$(awk -v f="^[[:space:]]*${FENCE}yaml[[:space:]]*$" -v c="^[[:space:]]*${FENCE}[[:space:]]*$" \
-            'BEGIN{IGNORECASE=1} $0 ~ f, $0 ~ c { print }' /tmp/c.md \
-            | grep -E '^\s*verdict:' | tail -1 \
-            | sed -E 's/.*verdict:\s*"?([a-z_]+)"?.*/\1/' || true)
-
-          case "$VERDICT" in
-            block_merge)
-              echo "::error::Tier 1 findings present — must address before merge"
-              exit 1
-              ;;
-            ship_it|ship_with_notes)
-              echo "::notice::Verdict: $VERDICT — gate passes"
-              ;;
-            *)
-              echo "::warning::Verdict missing or unrecognised ('$VERDICT') — passing open"
-              ;;
-          esac
+  # ============================================================================
+  # KNOWN ISSUE: claude-review + claude-review-gate jobs disabled in v1.0.5.
+  # GitHub Actions throws startup_failure when claude-review-gate uses
+  # `if: always()` or `if: !cancelled()` together with `needs: claude-review`,
+  # even with single-step gate logic. Root cause unknown; under investigation.
+  #
+  # Workaround for pilot: gate disabled. AI review available as a separate
+  # standalone workflow per repo (TODO). Tier 1 findings can still BLOCK merge
+  # via human review; just no automated trailer-based merge gate.
+  #
+  # When fixed, restore the claude-review and claude-review-gate jobs from
+  # tag v1.0.4 history.
+  # ============================================================================
 
