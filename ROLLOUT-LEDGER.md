@@ -58,8 +58,8 @@ Columns:
 | v1.2.1 | 2026-05-18 | working-directory moved to per-step (not `defaults.run.working-directory`) for reusable-workflow compatibility. |
 | v1.2.2 | 2026-05-18 | Restored full ci-core after cache clears. |
 | ⚠ v1.2.3 (transition) | 2026-05-18 | TS+npm + codecov env-gate only. Python + pnpm + Swift paths dropped. **DO NOT USE as baseline.** Transitional state during bisection of multi-path startup_failure. Next stable baseline is v1.3.0 (per-language ci-core split). See `BUILDER-BRIEF-v1.3.0.md`. |
-| v1.3.0-rc.1 | 2026-05-18 | **Per-language ci-core split.** `ci-core-python.yml`, `ci-core-typescript.yml`, `ci-core-swift.yml`. Monolithic `ci-core.yml` deleted. Caller template + scaffold-discipline updated. Codecov env-gate carried forward in Python + TypeScript. RC tag — `v1` not yet moved. Awaiting real-caller validation per criterion #10. |
-| **v1.3.0** | **planned** | Moves after RC validates against real callers (PowerBot for TS+pnpm, PowerSync for Python; TS+npm + Swift need test repos). |
+| **v1.3.0-rc.1** | **2026-05-18** | **Per-language ci-core split.** `ci-core-python.yml`, `ci-core-typescript.yml`, `ci-core-swift.yml`. Monolithic `ci-core.yml` deleted. Codecov env-gate carried forward. **Real-caller validation:** ✅ Python (PowerSync #234 caller pinned to rc.1 → `failure`, jobs ran, no startup_failure). ✅ TS+pnpm (PowerBot #11 caller pinned to rc.1 → `failure`, jobs ran, no startup_failure). ⏸ TS+npm (pending PLNR re-do per acceptance criterion #9). ⏸ Swift (pending Amprage scaffold). |
+| **v1.3.0** | **pending** | Moves floating `v1` after TS+npm + Swift validate. Until then callers pin to `@v1.3.0-rc.1`. |
 
 ---
 
