@@ -30,6 +30,20 @@ jobs:
       REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+
+      # Python
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff check
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff format --check
+
       - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
         uses: actions/setup-node@v4
         with:
@@ -47,6 +61,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run pyright
       - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
         uses: actions/setup-node@v4
         with:
@@ -68,6 +90,15 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run pytest --cov --cov-report=xml --cov-branch
+
       - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
         uses: actions/setup-node@v4
         with:
