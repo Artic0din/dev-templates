@@ -25,6 +25,8 @@ Columns:
 | Repo | Baseline | PR | CI | Stack issues | Repo issues | Next action |
 |---|---|---|---|---|---|---|
 | `Artic0din/GridWise` | — | [#176 CLOSED](https://github.com/Artic0din/GridWise/pull/176) | — | — | No longer actively developed; clean-slate stub since 2026-05-04. Bootstrap PR closed without merge. | **Dropped from rollout.** Reopen #176 if GridWise development resumes. |
+| `Artic0din/PowerSync` (bootstrap, fork-only) | v1.1.5 (policy ref) | [#233](https://github.com/Artic0din/PowerSync/pull/233) | pending | None — bootstrap is uv init only | HACS integration with no Python tooling. Bootstrap PR adds `pyproject.toml` (deps mirror manifest.json: aiohttp, aemo-to-tariff, cryptography, goodwe, protobuf, scipy), `uv.lock` (32 packages), `CHANGELOG.md` (fork-only). 487 tests collect locally. | Merge #233 to fork's `main`, THEN open fork-only scaffold PR. Base = `Artic0din/PowerSync:main`, never upstream. |
+| `Artic0din/PowerSync` (scaffold, fork-only) | — | — | — | — | — | Blocked on #233 merge. |
 
 ## Excluded from rollout
 
