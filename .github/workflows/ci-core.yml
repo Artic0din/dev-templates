@@ -1,23 +1,246 @@
 name: CI core
+
+# Reusable workflow. Callers (each repo's ci.yml) own the literal "CI passed"
+# rollup; this file exposes individual jobs only.
+#
+# v1.2.0 inputs:
+#   - working_directory: default '.', set for monorepos (e.g. PLNR's nesc-scheduler).
+#   - package_manager:   default 'pnpm', set 'npm' for repos using package-lock.json.
+#
+# v1.2.1: working-directory is set on each run step (not job defaults) for
+# reusable-workflow compatibility — defaults.run.working-directory: ${{ inputs.X }}
+# triggered startup_failure on PLNR; explicit per-step form works.
+#
+# Pinning policy (Addition A):
+#   - Allow-list (floating tag): anthropics/*, github/*, actions/*, codecov/*,
+#     astral-sh/*, pnpm/*. Re-audit quarterly.
+#   - Everything else: SHA-pin with version comment.
+
 on:
   workflow_call:
     inputs:
       language:
+        description: 'Language: python | swift | typescript | node'
         required: true
         type: string
       working_directory:
+        description: 'Working directory for run commands (default: repo root). Use for monorepos.'
         required: false
         type: string
         default: '.'
       package_manager:
+        description: 'TS/Node package manager: pnpm | npm (default: pnpm).'
         required: false
         type: string
         default: 'pnpm'
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+      CODECOV_TOKEN:
+        required: false
+
 jobs:
-  hello:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Python ---
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        uses: reviewdog/action-setup@19ad6fc8b7358ccdc9fd4a25c75dd93eeb097e1e # v1
+      - if: inputs.language == 'python' && github.event_name == 'pull_request'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          uv run ruff check --output-format rdjson | \
+            reviewdog -f=rdjson -name="ruff lint" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=any
+      - if: inputs.language == 'python' && github.event_name != 'pull_request'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff check
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff format --check
+
+      # --- TS / Node (pnpm) ---
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm lint
+
+      # --- TS / Node (npm) ---
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm run lint
+
+      # --- Swift ---
+      - if: inputs.language == 'swift'
+        working-directory: ${{ inputs.working_directory }}
+        run: brew install swiftformat swiftlint
+      - if: inputs.language == 'swift'
+        working-directory: ${{ inputs.working_directory }}
+        run: swiftformat --lint .
+      - if: inputs.language == 'swift'
+        working-directory: ${{ inputs.working_directory }}
+        run: swiftlint
+
+  typecheck:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          echo "lang=${{ inputs.language }}"
-          echo "wd=${{ inputs.working_directory }}"
-          echo "pm=${{ inputs.package_manager }}"
+      - uses: actions/checkout@v4
+
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run pyright
+
+      # TS pnpm
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm exec tsc --noEmit
+
+      # TS npm
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: inputs.language == 'typescript' && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npx tsc --noEmit
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: inputs.language == 'python'
+        uses: astral-sh/setup-uv@v3
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - if: inputs.language == 'python'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run pytest --cov --cov-report=xml --cov-branch
+
+      # TS/Node pnpm
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        uses: pnpm/action-setup@v3
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.working_directory }}/pnpm-lock.yaml
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: pnpm install --frozen-lockfile
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'pnpm'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            pnpm test:coverage
+          else
+            pnpm test
+          fi
+
+      # TS/Node npm
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+      - if: (inputs.language == 'typescript' || inputs.language == 'node') && inputs.package_manager == 'npm'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            npm run test:coverage
+          else
+            npm test
+          fi
+
+      - if: inputs.language == 'swift'
+        working-directory: ${{ inputs.working_directory }}
+        run: swift test --enable-code-coverage
+
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # KNOWN ISSUE: claude-review + claude-review-gate jobs disabled in v1.0.5.
+  # GitHub Actions throws startup_failure when claude-review-gate uses
+  # `if: always()` or `if: !cancelled()` together with `needs: claude-review`,
+  # even with single-step gate logic. Root cause unknown; under investigation.
+  #
+  # Workaround for pilot: gate disabled. AI review available as a separate
+  # standalone workflow per repo (TODO). Tier 1 findings can still BLOCK merge
+  # via human review; just no automated trailer-based merge gate.
+  #
+  # When fixed, restore the claude-review and claude-review-gate jobs from
+  # tag v1.0.4 history.
+  # ============================================================================
