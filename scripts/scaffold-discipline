@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# scaffold-discipline — apply discipline stack to current repo
+#
+# Usage:   scaffold-discipline {python|typescript|swift|node}
+# Reads:   ~/Claude/dev-templates/ (this checkout)
+# Writes:  current repo's .github/, configs, CONTRIBUTING, README
+#
+# Idempotent. Managed files overwritten; editable files only created if missing.
+# Does NOT create/modify pyproject.toml or package.json (per Clarification G).
+
+set -euo pipefail
+
+LANGUAGE="${1:-}"
+case "$LANGUAGE" in
+  python|typescript|swift|node) ;;
+  *)
+    echo "Usage: scaffold-discipline {python|typescript|swift|node}"
+    exit 1
+    ;;
+esac
+
+TEMPLATES="${SCAFFOLD_TEMPLATES_DIR:-$HOME/Claude/dev-templates}"
+if [[ ! -d "$TEMPLATES" ]]; then
+  echo "ERROR: templates dir not found: $TEMPLATES"
+  echo "Clone Artic0din/dev-templates to that location or set SCAFFOLD_TEMPLATES_DIR"
+  exit 1
+fi
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  echo "ERROR: not inside a git repo"
+  exit 1
+}
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+echo "→ scaffolding $LANGUAGE discipline into $REPO_ROOT"
+
+mkdir -p .github/workflows .github/instructions .github/prompts
+
+# --- Managed files (overwrite with cp -f) ---
+
+echo "  managed:"
+cp -f "$TEMPLATES/.github/instructions/meta.md"          .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/documentation.md" .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/tests.md"         .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/code-review.md"   .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/${LANGUAGE}.md"   .github/instructions/
+cp -f "$TEMPLATES/.github/prompts/pr-review.prompt.md"   .github/prompts/
+cp -f "$TEMPLATES/configs/codecov.yml"                   .
+cp -f "$TEMPLATES/configs/.gitleaks.toml"                .
+echo "    .github/instructions/*.md"
+echo "    .github/prompts/pr-review.prompt.md"
+echo "    codecov.yml, .gitleaks.toml"
+
+if [[ "$LANGUAGE" == "python" ]]; then
+  cp -f "$TEMPLATES/configs/zensical.toml" .
+  echo "    zensical.toml"
+fi
+
+# --- Editable files (cp -n, skip if exists) ---
+
+echo "  editable:"
+if [[ ! -f .github/workflows/ci.yml ]]; then
+  # Substitute language in caller template
+  sed "s/language: typescript/language: $LANGUAGE/" \
+    "$TEMPLATES/workflow-templates/ci.yml" > .github/workflows/ci.yml
+  echo "    .github/workflows/ci.yml (created)"
+else
+  echo "    .github/workflows/ci.yml (exists, skipped)"
+fi
+
+cp -n "$TEMPLATES/templates/CONTRIBUTING.md"          CONTRIBUTING.md         2>/dev/null && \
+  echo "    CONTRIBUTING.md (created)" || echo "    CONTRIBUTING.md (exists, skipped)"
+cp -n "$TEMPLATES/templates/copilot-instructions.md"  .github/copilot-instructions.md 2>/dev/null && \
+  echo "    .github/copilot-instructions.md (created)" || echo "    .github/copilot-instructions.md (exists, skipped)"
+
+# --- ai-review-override label provisioning ---
+
+echo "  label:"
+if gh repo view >/dev/null 2>&1; then
+  if gh label create ai-review-override \
+       --description "Bypass Claude review gate (incident-mode)" \
+       --color FFD700 2>/dev/null; then
+    echo "    ai-review-override (created)"
+  else
+    echo "    ai-review-override (already exists)"
+  fi
+else
+  echo "    [skip] no GitHub remote yet. After first push:"
+  echo "      gh label create ai-review-override --description 'Bypass Claude review gate' --color FFD700"
+fi
+
+# --- CodeRabbit cleanup (per brief Tool stance) ---
+
+echo "  coderabbit cleanup:"
+for f in .coderabbit.yaml .sourcery.yaml .github/workflows/dual-loop-review.yml .github/workflows/claude-assistant.yml; do
+  if [[ -f "$f" ]]; then
+    rm -f "$f"
+    echo "    removed $f"
+  fi
+done
+
+echo ""
+echo "✓ scaffold complete. Next:"
+echo "  1. Review the generated files."
+echo "  2. Set branch protection on main to require literal check: 'CI passed'"
+echo "  3. Set repo secrets: ANTHROPIC_API_KEY, CODECOV_TOKEN"
+echo "  4. Open a draft PR to validate the gate."

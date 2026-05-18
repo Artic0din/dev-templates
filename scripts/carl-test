@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# carl-test — show which CARL domains would fire for a given message
+#
+# Usage: carl-test "let's write some tests for the API"
+#
+# Reads ~/.carl/carl.json (CARL v2 JSON format).
+# Note: CARL is JSON-based, not file-based markdown — brief assumed wrong path.
+
+set -euo pipefail
+
+MESSAGE="${1:-}"
+if [[ -z "$MESSAGE" ]]; then
+  echo "Usage: carl-test \"your message here\""
+  exit 1
+fi
+
+CARL_JSON="${CARL_JSON:-$HOME/.carl/carl.json}"
+if [[ ! -f "$CARL_JSON" ]]; then
+  echo "ERROR: CARL config not found: $CARL_JSON"
+  exit 1
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq required"
+  exit 1
+fi
+
+MSG_LOWER=$(echo "$MESSAGE" | tr '[:upper:]' '[:lower:]')
+
+echo "Testing message: $MESSAGE"
+echo "---"
+
+# Iterate domains, check each domain's triggers list against message
+FIRED=0
+while IFS= read -r domain; do
+  triggers=$(jq -r --arg d "$domain" '.domains[$d].triggers // [] | .[]' "$CARL_JSON")
+  matched=()
+  while IFS= read -r trigger; do
+    [[ -z "$trigger" ]] && continue
+    trig_lower=$(echo "$trigger" | tr '[:upper:]' '[:lower:]')
+    if echo "$MSG_LOWER" | grep -qF "$trig_lower"; then
+      matched+=("$trigger")
+    fi
+  done <<< "$triggers"
+
+  if [[ ${#matched[@]} -gt 0 ]]; then
+    echo "✓ $domain — fired on: ${matched[*]}"
+    FIRED=$((FIRED + 1))
+  fi
+done < <(jq -r '.domains | keys[]' "$CARL_JSON")
+
+echo "---"
+if [[ $FIRED -eq 0 ]]; then
+  echo "(no domains fire — expected for messages outside any domain's triggers)"
+fi
