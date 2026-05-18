@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# discipline-doctor — inspect a repo, classify its stack, report blockers.
+#
+# Read-only. Never mutates. Use `discipline-bootstrap` to apply scaffold
+# after the report looks right.
+#
+# Usage:
+#   discipline-doctor [path]                # pretty report
+#   discipline-doctor [path] --json         # machine-readable JSON
+#   discipline-doctor --help
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: discipline-doctor [path] [--json]
+
+Inspects a repo and reports:
+  - detected language stack
+  - package manager + lockfile
+  - working_directory hint (for monorepos)
+  - git remote + default branch
+  - existing scaffold files (AGENTS.md, CLAUDE.md, workflows)
+  - existing CodeRabbit/Sourcery debris
+  - blockers preventing safe scaffold
+  - suggested scaffold-discipline command
+
+Flags:
+  --json    machine-readable output for orchestration
+  --help    this message
+EOF
+}
+
+JSON_MODE=0
+TARGET="${1:-.}"
+case "${1:-}" in
+  --help|-h) usage; exit 0 ;;
+  --json) JSON_MODE=1; TARGET="${2:-.}" ;;
+esac
+case "${2:-}" in
+  --json) JSON_MODE=1 ;;
+esac
+
+if [[ ! -d "$TARGET" ]]; then
+  echo "ERROR: not a directory: $TARGET" >&2
+  exit 1
+fi
+
+cd "$TARGET"
+REPO_ROOT=$(pwd -P)
+
+# ---- detection helpers ----
+
+has() { [[ -e "$1" ]]; }
+
+# Language detection (priority: explicit configs win over file extensions).
+detect_language() {
+  if has Package.swift || compgen -G "*.xcodeproj" >/dev/null || compgen -G "*.xcworkspace" >/dev/null; then
+    echo "swift"
+  elif has pyproject.toml; then
+    echo "python"
+  elif has package.json; then
+    if has next.config.js || has next.config.mjs || has next.config.ts; then
+      echo "typescript-nextjs"
+    elif has tsconfig.json; then
+      echo "typescript"
+    else
+      echo "node"
+    fi
+  elif compgen -G "*/package.json" >/dev/null && ! has package.json; then
+    # Monorepo: package.json in subdir(s), none at root
+    echo "typescript-monorepo"
+  elif has requirements.txt && ! has pyproject.toml; then
+    echo "python-legacy"
+  else
+    echo "unknown"
+  fi
+}
+
+detect_package_manager() {
+  if has pnpm-lock.yaml; then echo "pnpm"
+  elif has package-lock.json; then echo "npm"
+  elif has yarn.lock; then echo "yarn"
+  else echo "none"
+  fi
+}
+
+# Working-directory hint for monorepos: find a single nested package.json
+# when root has none. Returns "." if not detected.
+detect_working_directory() {
+  if has package.json || has pyproject.toml || has Package.swift; then
+    echo "."
+    return
+  fi
+  local hits
+  hits=$(find . -maxdepth 3 -name package.json -not -path '*/node_modules/*' -not -path '*/.*' 2>/dev/null | head -2)
+  if [[ $(echo "$hits" | wc -l | tr -d ' ') -eq 1 ]]; then
+    dirname "$hits" | sed 's|^\./||'
+  else
+    echo "."
+  fi
+}
+
+git_remote() {
+  git remote get-url origin 2>/dev/null | sed -E 's|.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$|\1|' || true
+}
+
+default_branch() {
+  git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || \
+    git config --get init.defaultBranch 2>/dev/null || echo "main"
+}
+
+current_branch() {
+  git branch --show-current 2>/dev/null || echo "(detached)"
+}
+
+# ---- collect ----
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  IS_GIT=1
+  REMOTE=$(git_remote)
+  DEFAULT_BRANCH=$(default_branch)
+  CURRENT_BRANCH=$(current_branch)
+else
+  IS_GIT=0
+  REMOTE=""
+  DEFAULT_BRANCH=""
+  CURRENT_BRANCH=""
+fi
+
+LANGUAGE=$(detect_language)
+PKG_MGR=$(detect_package_manager)
+WORK_DIR=$(detect_working_directory)
+
+# Existing scaffold files.
+HAS_AGENTS=$(has AGENTS.md && echo 1 || echo 0)
+HAS_CLAUDE=$(has CLAUDE.md && echo 1 || echo 0)
+HAS_COPILOT=$(has .github/copilot-instructions.md && echo 1 || echo 0)
+HAS_CONTRIB=$(has CONTRIBUTING.md && echo 1 || echo 0)
+HAS_CI_YAML=$(has .github/workflows/ci.yml && echo 1 || echo 0)
+HAS_INSTRUCTIONS_DIR=$(has .github/instructions && echo 1 || echo 0)
+HAS_CODECOV=$(has codecov.yml && echo 1 || echo 0)
+HAS_GITLEAKS=$(has .gitleaks.toml && echo 1 || echo 0)
+
+# CodeRabbit / Sourcery debris.
+DEBRIS=()
+for f in .coderabbit.yaml .sourcery.yaml \
+         .github/workflows/dual-loop-review.yml \
+         .github/workflows/claude-assistant.yml \
+         .github/workflows/coderabbit-nitpicks.yml; do
+  has "$f" && DEBRIS+=("$f")
+done
+
+# Existing repo-specific workflows that may overlap with ci-core.
+OVERLAPS=()
+if has .github/workflows; then
+  for f in .github/workflows/*.yml; do
+    [[ -f "$f" ]] || continue
+    base=$(basename "$f")
+    case "$base" in
+      ci.yml|security-scan.yml|docs-check.yml|pr-title-check.yml|version-drift-guard.yml) ;;
+      ci-core-python.yml|ci-core-typescript.yml|ci-core-swift.yml|ci-core.yml) ;;
+      *)
+        # heuristic: file mentions lint/typecheck/test
+        if grep -qE "(ruff|pyright|pytest|eslint|tsc --noEmit|vitest|jest|swift test|swiftlint)" "$f" 2>/dev/null; then
+          OVERLAPS+=("$base")
+        fi
+        ;;
+    esac
+  done
+fi
+
+# ---- blockers + warnings ----
+
+BLOCKERS=()
+WARNINGS=()
+READY=()
+
+[[ $IS_GIT -eq 1 ]] && READY+=("git repo") || BLOCKERS+=("not a git repo (run \`git init\` first)")
+
+case "$LANGUAGE" in
+  unknown)
+    BLOCKERS+=("could not classify stack — add package.json, pyproject.toml, or Package.swift")
+    ;;
+  python)
+    READY+=("pyproject.toml present")
+    has uv.lock && READY+=("uv.lock present") || WARNINGS+=("no uv.lock — run \`uv lock\`")
+    ;;
+  python-legacy)
+    BLOCKERS+=("legacy Python repo with only requirements.txt — migrate to pyproject.toml + uv first (\`uv init\` + \`uv add\`)")
+    ;;
+  typescript|typescript-nextjs|node)
+    READY+=("package.json present")
+    case "$PKG_MGR" in
+      pnpm) READY+=("pnpm-lock.yaml present") ;;
+      npm)  READY+=("package-lock.json present") ;;
+      yarn) BLOCKERS+=("yarn lockfile — ci-core supports pnpm + npm only; migrate first") ;;
+      none) BLOCKERS+=("no lockfile — run \`pnpm install\` or \`npm install\`") ;;
+    esac
+    has tsconfig.json && READY+=("tsconfig.json present") || \
+      [[ "$LANGUAGE" == "typescript" ]] && WARNINGS+=("no tsconfig.json — typecheck job may fail")
+    # Check for lint/test scripts
+    if has package.json; then
+      jq -e '.scripts.lint' package.json >/dev/null 2>&1 || WARNINGS+=("no \`lint\` script in package.json — lint job will fail with 'missing script'")
+      jq -e '.scripts.test or .scripts["test:coverage"]' package.json >/dev/null 2>&1 || WARNINGS+=("no \`test\` or \`test:coverage\` script — tests job will fail")
+    fi
+    ;;
+  typescript-monorepo)
+    WARNINGS+=("monorepo detected — no root package.json. Set \`working_directory: $WORK_DIR\` in caller")
+    ;;
+  swift)
+    if has Package.swift; then
+      READY+=("Package.swift present (SwiftPM)")
+    else
+      WARNINGS+=("Xcode project only (no Package.swift) — \`swift test\` will fail. ci-core-swift.yml SwiftPM-only until v1.4 adds xcodebuild support")
+    fi
+    ;;
+esac
+
+[[ $IS_GIT -eq 1 && -z "$REMOTE" ]] && WARNINGS+=("no GitHub remote — scaffold runs locally but \`ai-review-override\` label won't be created")
+
+[[ ${#DEBRIS[@]} -gt 0 ]] && WARNINGS+=("CodeRabbit/Sourcery debris present: ${DEBRIS[*]} (scaffold will remove these)")
+
+[[ ${#OVERLAPS[@]} -gt 0 ]] && WARNINGS+=("repo-specific workflows that may overlap with ci-core: ${OVERLAPS[*]}")
+
+# ---- suggested command ----
+
+case "$LANGUAGE" in
+  python|python-legacy) SCAFFOLD_LANG=python ;;
+  typescript|typescript-nextjs|typescript-monorepo) SCAFFOLD_LANG=typescript ;;
+  node) SCAFFOLD_LANG=node ;;
+  swift) SCAFFOLD_LANG=swift ;;
+  *) SCAFFOLD_LANG="" ;;
+esac
+
+SUGGEST=""
+if [[ -n "$SCAFFOLD_LANG" && ${#BLOCKERS[@]} -eq 0 ]]; then
+  SUGGEST="scaffold-discipline $SCAFFOLD_LANG"
+  [[ "$WORK_DIR" != "." ]] && SUGGEST+="  # then set working_directory: $WORK_DIR in caller"
+  [[ "$PKG_MGR" == "npm" ]] && SUGGEST+="  # then set package_manager: npm in caller"
+fi
+
+# ---- output ----
+
+if [[ "$JSON_MODE" -eq 1 ]]; then
+  # JSON output for orchestration. Hand-rolled (no jq dep on output side).
+  python3 - <<PY
+import json
+ready = $(printf '%s\n' "${READY[@]}" | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+warnings = $(printf '%s\n' "${WARNINGS[@]}" | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+blockers = $(printf '%s\n' "${BLOCKERS[@]}" | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+overlaps = $(printf '%s\n' "${OVERLAPS[@]}" | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+debris = $(printf '%s\n' "${DEBRIS[@]}" | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+print(json.dumps({
+    "repo_root": "$REPO_ROOT",
+    "is_git": bool($IS_GIT),
+    "remote": "$REMOTE",
+    "default_branch": "$DEFAULT_BRANCH",
+    "current_branch": "$CURRENT_BRANCH",
+    "language": "$LANGUAGE",
+    "scaffold_language": "$SCAFFOLD_LANG",
+    "package_manager": "$PKG_MGR",
+    "working_directory": "$WORK_DIR",
+    "existing": {
+        "agents_md": bool($HAS_AGENTS),
+        "claude_md": bool($HAS_CLAUDE),
+        "copilot_instructions": bool($HAS_COPILOT),
+        "contributing_md": bool($HAS_CONTRIB),
+        "ci_yml": bool($HAS_CI_YAML),
+        "instructions_dir": bool($HAS_INSTRUCTIONS_DIR),
+        "codecov_yml": bool($HAS_CODECOV),
+        "gitleaks_toml": bool($HAS_GITLEAKS),
+    },
+    "ready": ready,
+    "warnings": warnings,
+    "blockers": blockers,
+    "overlaps": overlaps,
+    "debris": debris,
+    "suggested": "$SUGGEST"
+}, indent=2))
+PY
+  exit 0
+fi
+
+# Pretty output.
+echo "Repo: $REPO_ROOT"
+[[ $IS_GIT -eq 1 ]] && echo "Detected: $LANGUAGE" || echo "Detected: (not a git repo)"
+echo "Package manager: $PKG_MGR"
+echo "Working directory: $WORK_DIR"
+[[ -n "$REMOTE" ]] && echo "GitHub remote: $REMOTE" || echo "GitHub remote: (none)"
+echo "Default branch: $DEFAULT_BRANCH"
+echo "Current branch: $CURRENT_BRANCH"
+echo ""
+
+if [[ ${#READY[@]} -gt 0 ]]; then
+  echo "Ready:"
+  for r in "${READY[@]}"; do echo "  ✅ $r"; done
+  echo ""
+fi
+
+if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+  echo "Warnings:"
+  for w in "${WARNINGS[@]}"; do echo "  ⚠ $w"; done
+  echo ""
+fi
+
+if [[ ${#BLOCKERS[@]} -gt 0 ]]; then
+  echo "Blocked:"
+  for b in "${BLOCKERS[@]}"; do echo "  ❌ $b"; done
+  echo ""
+  echo "Resolve blockers, then re-run discipline-doctor."
+  exit 2
+fi
+
+if [[ -n "$SUGGEST" ]]; then
+  echo "Suggested command:"
+  echo "  $SUGGEST"
+  echo ""
+  echo "Or apply via orchestrator:"
+  echo "  discipline-bootstrap $REPO_ROOT --apply"
+fi
+
+exit 0

@@ -105,14 +105,50 @@ Each caller adds a `ci-passed` rollup job that branch protection requires.
 
 ## Scaffold a repo
 
+Three tools, layered:
+
+```bash
+discipline-doctor /path/to/repo            # inspect + report (read-only)
+discipline-bootstrap /path/to/repo --apply  # doctor + apply scaffold
+discipline-bootstrap /path/to/repo --apply --open-pr  # also commit + push + PR
+```
+
+Or the low-level copier directly:
+
 ```bash
 ~/bin/scaffold-discipline {python|typescript|swift|node}
 ```
 
-From inside the target repo. Idempotent — safe to re-run. Migrates v1.0.x
-repos by renaming `.github/instructions/*.md` to `*.instructions.md` and
-stripping Cursor-only frontmatter fields. Generates a caller `ci.yml` that
-invokes the right per-language reusable workflow.
+### `discipline-doctor`
+
+Read-only. Inspects a folder and reports:
+
+- detected language stack (python, typescript, typescript-nextjs, node, swift, …)
+- package manager (pnpm / npm / yarn-unsupported / none)
+- working_directory hint for monorepos
+- git remote + default + current branch
+- existing scaffold files (AGENTS.md, CLAUDE.md, workflows)
+- CodeRabbit / Sourcery debris
+- workflows that may overlap with ci-core
+- blockers preventing safe scaffold
+- suggested `scaffold-discipline` command
+
+Flags: `--json` (machine-readable for orchestration), `--help`.
+
+Refuses to inspect non-directories. Exits non-zero on blockers.
+
+### `discipline-bootstrap`
+
+Orchestrator. Runs doctor, then optionally applies the scaffold and opens
+a draft PR. Refuses to apply if doctor reports any blockers.
+
+### `scaffold-discipline`
+
+Low-level copier. Idempotent — safe to re-run. Migrates v1.0.x repos by
+renaming `.github/instructions/*.md` to `*.instructions.md` and stripping
+Cursor-only frontmatter fields. Generates a caller `ci.yml` that invokes
+the right per-language reusable workflow. Won't create or modify toolchain
+config files (`pyproject.toml`, `package.json`, `Package.swift`).
 
 ## Pinning policy
 
