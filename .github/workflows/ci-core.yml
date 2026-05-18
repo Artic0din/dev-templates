@@ -19,10 +19,13 @@ on:
         required: true
         type: string
     secrets:
+      # Both optional: missing ANTHROPIC_API_KEY → claude-review fails → gate
+      # passes open (fail-open). Missing CODECOV_TOKEN → upload step warns
+      # but fail_ci_if_error: false keeps it from blocking.
       ANTHROPIC_API_KEY:
-        required: true
+        required: false
       CODECOV_TOKEN:
-        required: true
+        required: false
 
 jobs:
   # --- Lint and format ---
