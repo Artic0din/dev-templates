@@ -139,8 +139,15 @@ jobs:
           cache: 'pnpm'
       - if: inputs.language == 'typescript' || inputs.language == 'node'
         run: pnpm install --frozen-lockfile
+      # Repos may have either `pnpm test:coverage` or just `pnpm test`.
+      # Prefer test:coverage; fall back to test. Coverage upload is best-effort.
       - if: inputs.language == 'typescript' || inputs.language == 'node'
-        run: pnpm test:coverage
+        run: |
+          if jq -e '.scripts["test:coverage"]' package.json >/dev/null 2>&1; then
+            pnpm test:coverage
+          else
+            pnpm test
+          fi
 
       - if: inputs.language == 'swift'
         run: swift test --enable-code-coverage
