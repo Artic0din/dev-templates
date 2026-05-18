@@ -33,7 +33,7 @@ jobs:
 
       # Python
       - if: inputs.language == 'python'
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - if: inputs.language == 'python'
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - if: inputs.language == 'python'
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
       - if: inputs.language == 'python'
         working-directory: ${{ inputs.working_directory }}
         run: uv sync --locked --all-extras --dev
