@@ -1,0 +1,88 @@
+name: CI core (python)
+
+# Per-language reusable workflow. Callers (each repo's ci.yml) own the
+# literal "CI passed" rollup; this file exposes individual jobs only.
+#
+# Assumes the caller repo has pyproject.toml + uv.lock at working_directory.
+# Migrate from requirements.txt with `uv init` + `uv add` first.
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Working directory for run commands (default: repo root). Use for monorepos.'
+        required: false
+        type: string
+        default: '.'
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v8
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - uses: reviewdog/action-setup@19ad6fc8b7358ccdc9fd4a25c75dd93eeb097e1e # v1
+      - if: github.event_name == 'pull_request'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          uv run ruff check --output-format rdjson | \
+            reviewdog -f=rdjson -name="ruff lint" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=any
+      - if: github.event_name != 'pull_request'
+        working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff check
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv run ruff format --check
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v8
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv run pyright
+
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      # Promote secret to env so codecov step's `if:` can gate on presence.
+      # `secrets` context isn't available in step `if:` per GitHub docs.
+      # Empty CODECOV_TOKEN passed to codecov-action triggers startup_failure
+      # — env-gate prevents that.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v8
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv sync --locked --all-extras --dev
+      - working-directory: ${{ inputs.working_directory }}
+        run: uv run pytest --cov --cov-report=xml --cov-branch
+      - if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

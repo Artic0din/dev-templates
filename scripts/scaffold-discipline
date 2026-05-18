@@ -68,7 +68,7 @@ if [[ "$LANGUAGE" == "typescript" || "$LANGUAGE" == "node" ]]; then
   fi
 fi
 
-echo "→ scaffolding $LANGUAGE discipline v1.1.x into $REPO_ROOT"
+echo "→ scaffolding $LANGUAGE discipline v1.3.0 into $REPO_ROOT"
 
 mkdir -p .github/workflows .github/instructions .github/prompts
 
@@ -116,9 +116,62 @@ fi
 
 echo "  editable:"
 if [[ ! -f .github/workflows/ci.yml ]]; then
-  sed "s/language: typescript/language: $LANGUAGE/" \
-    "$TEMPLATES/workflow-templates/ci.yml" > .github/workflows/ci.yml
-  echo "    .github/workflows/ci.yml (created)"
+  # Generate caller pointing to the right per-language ci-core workflow (v1.3.0+).
+  case "$LANGUAGE" in
+    python)
+      USES_LINE="Artic0din/dev-templates/.github/workflows/ci-core-python.yml@v1"
+      WITH_BLOCK="    # with:
+    #   working_directory: .       # Set for monorepos."
+      ;;
+    typescript|node)
+      USES_LINE="Artic0din/dev-templates/.github/workflows/ci-core-typescript.yml@v1"
+      PM_DEFAULT="${DETECTED_PM:-pnpm}"
+      if [[ "$PM_DEFAULT" != "pnpm" && "$PM_DEFAULT" != "npm" ]]; then
+        PM_DEFAULT=pnpm
+      fi
+      WITH_BLOCK="    with:
+      working_directory: .
+      package_manager: ${PM_DEFAULT}"
+      ;;
+    swift)
+      USES_LINE="Artic0din/dev-templates/.github/workflows/ci-core-swift.yml@v1"
+      WITH_BLOCK="    # with:
+    #   working_directory: ."
+      ;;
+  esac
+  cat > .github/workflows/ci.yml <<EOF
+name: CI
+
+# Editable caller for the reusable ci-core workflow (v1.3.0+).
+# Owns the literal "CI passed" rollup so branch protection has a
+# stable check name.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  core:
+    uses: ${USES_LINE}
+${WITH_BLOCK}
+    secrets: inherit
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [core]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all dependencies succeeded
+        run: |
+          if [[ "\${{ needs.core.result }}" != "success" ]]; then
+            echo "::error::core job result: \${{ needs.core.result }}"
+            exit 1
+          fi
+          echo "✓ CI passed"
+EOF
+  echo "    .github/workflows/ci.yml (created, language=$LANGUAGE)"
 else
   echo "    .github/workflows/ci.yml (exists, skipped)"
 fi
@@ -197,7 +250,7 @@ for f in .github/instructions/*.instructions.md; do
 done
 
 echo ""
-echo "✓ scaffold v1.1.0 complete. Next:"
+echo "✓ scaffold v1.3.0 complete. Next:"
 echo "  1. Review AGENTS.md (Codex role) and CLAUDE.md (builder discipline)."
 echo "  2. Set branch protection on main: literal check 'CI passed'."
 echo "  3. Set repo secrets if needed: ANTHROPIC_API_KEY (optional), CODECOV_TOKEN."
