@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# scaffold-discipline — apply discipline stack to current repo
+# scaffold-discipline — apply v1.1.0 discipline stack to current repo
 #
 # Usage:   scaffold-discipline {python|typescript|swift|node}
 # Reads:   ~/Claude/dev-templates/ (this checkout)
-# Writes:  current repo's .github/, configs, CONTRIBUTING, README
+# Writes:  current repo's .github/, configs, CONTRIBUTING, AGENTS.md
 #
 # Idempotent. Managed files overwritten; editable files only created if missing.
-# Does NOT create/modify pyproject.toml or package.json (per Clarification G).
+# Migrates v1.0.x repos: renames .github/instructions/*.md to *.instructions.md.
+# Does NOT create/modify pyproject.toml or package.json (Clarification G).
 
 set -euo pipefail
 
@@ -33,23 +34,43 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
-echo "→ scaffolding $LANGUAGE discipline into $REPO_ROOT"
+echo "→ scaffolding $LANGUAGE discipline v1.1.0 into $REPO_ROOT"
 
 mkdir -p .github/workflows .github/instructions .github/prompts
+
+# --- v1.0.x → v1.1.0 migration: rename instruction files ---
+
+echo "  migration:"
+migrated=0
+for stem in meta documentation tests code-review python typescript swift node; do
+  old=".github/instructions/${stem}.md"
+  new=".github/instructions/${stem}.instructions.md"
+  if [[ -f "$old" && ! -f "$new" ]]; then
+    git mv "$old" "$new" 2>/dev/null || mv "$old" "$new"
+    echo "    rename $stem.md → $stem.instructions.md"
+    migrated=$((migrated + 1))
+  fi
+done
+[[ $migrated -eq 0 ]] && echo "    (no v1.0.x instructions to rename)"
 
 # --- Managed files (overwrite with cp -f) ---
 
 echo "  managed:"
-cp -f "$TEMPLATES/.github/instructions/meta.md"          .github/instructions/
-cp -f "$TEMPLATES/.github/instructions/documentation.md" .github/instructions/
-cp -f "$TEMPLATES/.github/instructions/tests.md"         .github/instructions/
-cp -f "$TEMPLATES/.github/instructions/code-review.md"   .github/instructions/
-cp -f "$TEMPLATES/.github/instructions/${LANGUAGE}.md"   .github/instructions/
-cp -f "$TEMPLATES/.github/prompts/pr-review.prompt.md"   .github/prompts/
-cp -f "$TEMPLATES/configs/codecov.yml"                   .
-cp -f "$TEMPLATES/configs/.gitleaks.toml"                .
-echo "    .github/instructions/*.md"
+cp -f "$TEMPLATES/.github/instructions/meta.instructions.md"          .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/documentation.instructions.md" .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/tests.instructions.md"         .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/code-review.instructions.md"   .github/instructions/
+cp -f "$TEMPLATES/.github/instructions/${LANGUAGE}.instructions.md"   .github/instructions/
+cp -f "$TEMPLATES/.github/prompts/pr-review.prompt.md"                .github/prompts/
+cp -f "$TEMPLATES/.github/workflows/security-scan.yml"                .github/workflows/
+cp -f "$TEMPLATES/.github/workflows/docs-check.yml"                   .github/workflows/
+cp -f "$TEMPLATES/.github/workflows/pr-title-check.yml"               .github/workflows/
+cp -f "$TEMPLATES/.github/workflows/version-drift-guard.yml"          .github/workflows/
+cp -f "$TEMPLATES/configs/codecov.yml"                                .
+cp -f "$TEMPLATES/configs/.gitleaks.toml"                             .
+echo "    .github/instructions/*.instructions.md"
 echo "    .github/prompts/pr-review.prompt.md"
+echo "    .github/workflows/{security-scan,docs-check,pr-title-check,version-drift-guard}.yml"
 echo "    codecov.yml, .gitleaks.toml"
 
 if [[ "$LANGUAGE" == "python" ]]; then
@@ -61,7 +82,6 @@ fi
 
 echo "  editable:"
 if [[ ! -f .github/workflows/ci.yml ]]; then
-  # Substitute language in caller template
   sed "s/language: typescript/language: $LANGUAGE/" \
     "$TEMPLATES/workflow-templates/ci.yml" > .github/workflows/ci.yml
   echo "    .github/workflows/ci.yml (created)"
@@ -69,10 +89,20 @@ else
   echo "    .github/workflows/ci.yml (exists, skipped)"
 fi
 
-cp -n "$TEMPLATES/templates/CONTRIBUTING.md"          CONTRIBUTING.md         2>/dev/null && \
-  echo "    CONTRIBUTING.md (created)" || echo "    CONTRIBUTING.md (exists, skipped)"
-cp -n "$TEMPLATES/templates/copilot-instructions.md"  .github/copilot-instructions.md 2>/dev/null && \
-  echo "    .github/copilot-instructions.md (created)" || echo "    .github/copilot-instructions.md (exists, skipped)"
+for src_dst in \
+  "templates/AGENTS.md:AGENTS.md" \
+  "templates/CLAUDE.md:CLAUDE.md" \
+  "templates/CONTRIBUTING.md:CONTRIBUTING.md" \
+  "templates/copilot-instructions.md:.github/copilot-instructions.md"; do
+  src="${src_dst%%:*}"
+  dst="${src_dst##*:}"
+  if [[ ! -f "$dst" ]]; then
+    cp "$TEMPLATES/$src" "$dst"
+    echo "    $dst (created)"
+  else
+    echo "    $dst (exists, skipped)"
+  fi
+done
 
 # --- ai-review-override label provisioning ---
 
@@ -86,23 +116,40 @@ if gh repo view >/dev/null 2>&1; then
     echo "    ai-review-override (already exists)"
   fi
 else
-  echo "    [skip] no GitHub remote yet. After first push:"
-  echo "      gh label create ai-review-override --description 'Bypass Claude review gate' --color FFD700"
+  echo "    [skip] no GitHub remote yet"
 fi
 
-# --- CodeRabbit cleanup (per brief Tool stance) ---
+# --- CodeRabbit + Cursor cleanup ---
 
-echo "  coderabbit cleanup:"
-for f in .coderabbit.yaml .sourcery.yaml .github/workflows/dual-loop-review.yml .github/workflows/claude-assistant.yml; do
+echo "  cleanup:"
+for f in .coderabbit.yaml .sourcery.yaml \
+         .github/workflows/dual-loop-review.yml \
+         .github/workflows/claude-assistant.yml \
+         .github/workflows/coderabbit.yml; do
   if [[ -f "$f" ]]; then
     rm -f "$f"
     echo "    removed $f"
   fi
 done
+if [[ -d .cursor ]]; then
+  rm -rf .cursor
+  echo "    removed .cursor/ directory"
+fi
+
+# --- Strip Cursor-only frontmatter fields from instructions if present ---
+
+for f in .github/instructions/*.instructions.md; do
+  [[ -f "$f" ]] || continue
+  if grep -qE "^(globs|alwaysApply):" "$f"; then
+    # In-place edit to drop Cursor fields. Keep `applyTo:` line.
+    sed -i.bak -E '/^(globs|alwaysApply):/d' "$f" && rm -f "$f.bak"
+    echo "    stripped Cursor fields from $(basename "$f")"
+  fi
+done
 
 echo ""
-echo "✓ scaffold complete. Next:"
-echo "  1. Review the generated files."
-echo "  2. Set branch protection on main to require literal check: 'CI passed'"
-echo "  3. Set repo secrets: ANTHROPIC_API_KEY, CODECOV_TOKEN"
-echo "  4. Open a draft PR to validate the gate."
+echo "✓ scaffold v1.1.0 complete. Next:"
+echo "  1. Review AGENTS.md (Codex role) and CLAUDE.md (builder discipline)."
+echo "  2. Set branch protection on main: literal check 'CI passed'."
+echo "  3. Set repo secrets if needed: ANTHROPIC_API_KEY (optional), CODECOV_TOKEN."
+echo "  4. Open a draft PR to validate the stack."

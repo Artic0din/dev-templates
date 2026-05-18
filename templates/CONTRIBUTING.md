@@ -1,5 +1,14 @@
 # Contributing
 
+## Three-agent workflow
+
+Claude Code builds → Codex reviews locally → GitHub Copilot reviews inline
+on the PR → CI verifies → Ryan merges manually.
+
+- **Builder (Claude Code)** — see `CLAUDE.md` for build discipline.
+- **Local reviewer (Codex)** — see `AGENTS.md` for review priorities.
+- **PR reviewer (Copilot)** — see `.github/copilot-instructions.md`.
+
 ## Branches and PRs
 
 - Feature branches off `main`. No direct commits to `main`.
@@ -8,39 +17,35 @@
   `perf`, `build`, `revert`, `style`.
 - PR title follows the same convention (squash merge puts PR title in
   history).
-
-## Draft PRs
-
-Draft PRs skip Claude review; the merge gate passes open until you mark
-Ready for review.
+- Open PRs as draft. Mark ready only after Codex local review passes.
 
 ## CI gate
 
 Branch protection requires the literal `CI passed` check. Individual job
-results (lint, typecheck, tests, codecov, claude-review-gate) feed into
-the rollup via `needs:`.
+results (lint, typecheck, gitleaks, tests, codecov) feed into the rollup
+via `needs:` in the caller `ci.yml`.
 
-## AI review
+## Override label
 
-Claude Code reviews every non-draft PR with tiered findings:
-- **Tier 1** blocks merge (security, logic bugs, missing tests for new
-  public APIs).
-- **Tier 2** records concerns (perf, API design, docs drift).
-- **Tier 3** strong-justification only (architecture, naming).
-
-Override the gate with the `ai-review-override` label. Use only for:
-- Anthropic API outage (Claude review didn't run)
+The optional Claude Code Action gate (disabled in v1.1.0 baseline) can be
+bypassed with the `ai-review-override` label. Use only for:
+- Anthropic API outage
 - Trailer malformed but actual review fine
 - Production incident requiring immediate merge
 
 Document the reason in the PR body when applying the label.
+
+## Draft PRs
+
+Draft PRs skip the optional Claude review; the merge gate (when enabled)
+passes open until you mark Ready for review.
 
 ## Local checks before push
 
 Run the same checks CI runs:
 - TypeScript: `pnpm lint && pnpm exec tsc --noEmit && pnpm test:coverage && pnpm build`
 - Python: `uv run ruff check && uv run pyright && uv run pytest`
-- Swift: `swiftlint && swift build && swift test`
+- Swift: `swiftlint --strict && swift build && swift test`
 
 Never push with failing local checks.
 
