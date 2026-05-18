@@ -24,7 +24,8 @@ Columns:
 
 | Repo | Baseline | PR | CI | Stack issues | Repo issues | Next action |
 |---|---|---|---|---|---|---|
-| `Artic0din/GridWise` | — | — | — | — | **Clean-slate state**: commit `975c7aa` stripped the entire Python coordination layer (per `feedback_gridwise_v3_migration`, EMHASS removed, PowerSync owns optimiser+control). origin/main contains 8 files total. No `.py`, no `pyproject.toml`, no source. | **STOPPED per policy.** GridWise is unsuitable for Python-path validation in its current state. Recommend either (a) skip to PowerSync, or (b) bootstrap GridWise v4 with `uv init` + minimal package before scaffold. Ryan decides. |
+| `Artic0din/GridWise` (bootstrap) | v1.1.5 (policy reference) | [#176](https://github.com/Artic0din/GridWise/pull/176) | pending | None — bootstrap PR is uv init only, no stack files | Clean-slate state (commit `975c7aa` stripped coordination layer). Bootstrap PR adds `pyproject.toml` + `uv.lock` + `tests/test_smoke.py` + `AGENTS.md` + `CHANGELOG.md` so the scaffold can wire in. | Merge #176, THEN open scaffold PR (`scaffold-discipline python` on a fresh branch off main). |
+| `Artic0din/GridWise` (scaffold) | — | — | — | — | — | Blocked on #176 merge. |
 
 ---
 
