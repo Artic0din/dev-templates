@@ -41,8 +41,27 @@ dev-templates/
 │   └── zensical.toml
 └── scripts/
     ├── scaffold-discipline          # scaffold + migration script
-    └── carl-test                    # CARL JSON domain trigger debug
+    ├── carl-test                    # CARL JSON domain trigger debug
+    ├── claude-md-budget             # measure CLAUDE.md + @imports + MEMORY.md token cost
+    └── claude-md-canary             # structural drift checks for CLAUDE.md
 ```
+
+### CLAUDE.md hygiene scripts
+
+Run weekly or after large CLAUDE.md edits:
+
+```bash
+# Token budget for the always-on context (global + memory + repo CLAUDE.md + @imports)
+~/Claude/dev-templates/scripts/claude-md-budget .
+
+# Structural checks: size, broken @imports, rule count near 150 ceiling, NEVER/ALWAYS collisions, secret-shaped literals
+~/Claude/dev-templates/scripts/claude-md-canary .
+```
+
+Inspired by the context-engineering templates in
+[`FlorianBruniaux/claude-code-ultimate-guide`](https://github.com/FlorianBruniaux/claude-code-ultimate-guide/tree/main/examples/context-engineering)
+(CC-BY-SA-4.0) — rewritten to avoid licence drag and match this repo's
+conventions.
 
 ## Agent roles
 

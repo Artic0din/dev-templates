@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# claude-md-canary — structural drift checks for CLAUDE.md
+#
+# Catches: missing file, sparse content, oversized file, broken @imports,
+#          rule-count near adherence ceiling, conflicting directives.
+#
+# Usage:
+#   scripts/claude-md-canary                   # current dir
+#   scripts/claude-md-canary /path/to/repo
+#
+# Exit code = number of FAIL results (0 = clean).
+#
+# Inspired by FlorianBruniaux/claude-code-ultimate-guide (CC-BY-SA-4.0) — rewritten.
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-.}"
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+FILE="$PROJECT_DIR/CLAUDE.md"
+
+PASS=0; FAIL=0; WARN=0
+log() { printf "  %-5s %s\n" "$1" "$2"; }
+ok()  { log "PASS" "$2"; PASS=$((PASS+1)); }
+no()  { log "FAIL" "$2"; FAIL=$((FAIL+1)); }
+wn()  { log "WARN" "$2"; WARN=$((WARN+1)); }
+
+resolve_import() {
+  local raw="$1"
+  case "$raw" in
+    \~/*) echo "$HOME/${raw#~/}" ;;
+    /*)   echo "$raw" ;;
+    *)    echo "$PROJECT_DIR/$raw" ;;
+  esac
+}
+
+echo "claude-md-canary — $PROJECT_DIR"
+echo "─────────────────────────────────────────────────────────────────────"
+
+# 1. Exists
+if [ ! -f "$FILE" ]; then
+  no "exists" "CLAUDE.md not found at $FILE"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo "  $PASS pass / $FAIL fail / $WARN warn"
+  exit "$FAIL"
+fi
+ok "exists" "$FILE"
+
+# 2. Size
+lines=$(wc -l < "$FILE" | tr -d ' ')
+if   [ "$lines" -lt 10  ]; then no "size" "$lines lines (too sparse)"
+elif [ "$lines" -gt 500 ]; then wn "size" "$lines lines (>500 — modularize via @imports)"
+else                            ok "size" "$lines lines"
+fi
+
+# 3. Rule count (bullets + numbered items, rough)
+rules=$(grep -cE "^[[:space:]]*([-*]|[0-9]+\.) " "$FILE" 2>/dev/null || echo 0)
+if   [ "$rules" -gt 150 ]; then wn "rule count" "$rules rules (>150 adherence ceiling)"
+elif [ "$rules" -gt 120 ]; then wn "rule count" "$rules rules (approaching 150 ceiling)"
+else                            ok "rule count" "$rules rules"
+fi
+
+# 4. Broken @imports
+broken=0; total_imports=0
+while IFS= read -r imp; do
+  [ -z "$imp" ] && continue
+  total_imports=$((total_imports+1))
+  target="$(resolve_import "$imp")"
+  if [ ! -f "$target" ]; then
+    no "@import" "$imp (file missing)"
+    broken=$((broken+1))
+  fi
+done < <(grep -Eo '^@[^[:space:]]+' "$FILE" 2>/dev/null | sed 's/^@//' || true)
+
+if [ "$total_imports" -eq 0 ]; then
+  ok "@imports" "none declared"
+elif [ "$broken" -eq 0 ]; then
+  ok "@imports" "$total_imports declared, all resolve"
+fi
+
+# 5. Conflicting absolutes (NEVER X and ALWAYS X on same noun, rough heuristic)
+conflicts=$(awk '
+  /NEVER/ { gsub(/[^a-zA-Z ]/, "", $0); for (i=1; i<=NF; i++) if ($i == "NEVER") never[$(i+1)]++ }
+  /ALWAYS/{ gsub(/[^a-zA-Z ]/, "", $0); for (i=1; i<=NF; i++) if ($i == "ALWAYS") always[$(i+1)]++ }
+  END { for (k in never) if (k in always) print k }
+' "$FILE" | wc -l | tr -d ' ')
+if [ "$conflicts" -gt 0 ]; then
+  wn "conflicts" "$conflicts noun(s) appear under both NEVER and ALWAYS — review"
+else
+  ok "conflicts" "no NEVER/ALWAYS collisions"
+fi
+
+# 6. Secret-looking strings (paranoia: tokens, keys, passwords in CLAUDE.md)
+if grep -EiI '(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*[A-Za-z0-9_-]{20,}' "$FILE" >/dev/null 2>&1; then
+  no "secrets" "potential secret literal in CLAUDE.md — never commit credentials"
+else
+  ok "secrets" "no secret-shaped literals"
+fi
+
+echo "─────────────────────────────────────────────────────────────────────"
+echo "  $PASS pass / $FAIL fail / $WARN warn"
+exit "$FAIL"

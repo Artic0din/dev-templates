@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# claude-md-budget — measure always-on token cost of CLAUDE.md + @imports + MEMORY.md
+#
+# Usage:
+#   scripts/claude-md-budget                   # current dir
+#   scripts/claude-md-budget /path/to/repo     # specific repo
+#
+# Token estimate: ~4 chars per token.
+# Bands:
+#   < 2K     LEAN
+#   2K-10K   HEALTHY
+#   10K-25K  HEAVY (trim or modularize)
+#   > 25K    OVERLOADED (rules will be deprioritized)
+#
+# Inspired by FlorianBruniaux/claude-code-ultimate-guide (CC-BY-SA-4.0) — rewritten.
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-.}"
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+GLOBAL_CLAUDE="$HOME/.claude/CLAUDE.md"
+GLOBAL_MEMORY="$HOME/.claude/projects/-Users-$(id -un)/memory/MEMORY.md"
+PROJECT_CLAUDE="$PROJECT_DIR/CLAUDE.md"
+
+tokens_of() {
+  local file="$1"
+  [ -f "$file" ] || { echo 0; return; }
+  local chars
+  chars=$(wc -c < "$file" | tr -d ' ')
+  echo $((chars / 4))
+}
+
+lines_of() {
+  local file="$1"
+  [ -f "$file" ] || { echo 0; return; }
+  wc -l < "$file" | tr -d ' '
+}
+
+resolve_import() {
+  local raw="$1"
+  case "$raw" in
+    \~/*) echo "$HOME/${raw#~/}" ;;
+    /*)   echo "$raw" ;;
+    *)    echo "$PROJECT_DIR/$raw" ;;
+  esac
+}
+
+collect_imports() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  grep -Eo '^@[^[:space:]]+' "$file" 2>/dev/null | sed 's/^@//' || true
+}
+
+print_row() {
+  printf "  %-50s %6s lines  %7s tokens\n" "$1" "$2" "$3"
+}
+
+band() {
+  local t="$1"
+  if   [ "$t" -lt  2000 ]; then echo "LEAN"
+  elif [ "$t" -lt 10000 ]; then echo "HEALTHY"
+  elif [ "$t" -lt 25000 ]; then echo "HEAVY"
+  else                          echo "OVERLOADED"
+  fi
+}
+
+total=0
+echo "claude-md-budget — $PROJECT_DIR"
+echo "─────────────────────────────────────────────────────────────────────"
+
+for f in "$GLOBAL_CLAUDE" "$GLOBAL_MEMORY" "$PROJECT_CLAUDE"; do
+  [ -f "$f" ] || continue
+  t=$(tokens_of "$f"); l=$(lines_of "$f")
+  rel="${f/#$HOME/~}"
+  print_row "$rel" "$l" "$t"
+  total=$((total + t))
+
+  while IFS= read -r imp; do
+    [ -z "$imp" ] && continue
+    target="$(resolve_import "$imp")"
+    if [ -f "$target" ]; then
+      ti=$(tokens_of "$target"); li=$(lines_of "$target")
+      reli="${target/#$HOME/~}"
+      print_row "  ↳ @$reli" "$li" "$ti"
+      total=$((total + ti))
+    else
+      print_row "  ↳ @$imp (MISSING)" "-" "-"
+    fi
+  done < <(collect_imports "$f")
+done
+
+echo "─────────────────────────────────────────────────────────────────────"
+printf "  TOTAL always-on: ~%d tokens  [%s]\n" "$total" "$(band "$total")"
