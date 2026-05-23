@@ -39,9 +39,9 @@ lines_of() {
 resolve_import() {
   local raw="$1"
   case "$raw" in
-    \~/*) echo "$HOME/${raw#~/}" ;;
-    /*)   echo "$raw" ;;
-    *)    echo "$PROJECT_DIR/$raw" ;;
+    "~/"*) echo "${HOME}/${raw#"~/"}" ;;
+    /*)    echo "$raw" ;;
+    *)     echo "$PROJECT_DIR/$raw" ;;
   esac
 }
 

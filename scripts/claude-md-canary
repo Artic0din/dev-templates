@@ -27,9 +27,9 @@ wn()  { log "WARN" "$2"; WARN=$((WARN+1)); }
 resolve_import() {
   local raw="$1"
   case "$raw" in
-    \~/*) echo "$HOME/${raw#~/}" ;;
-    /*)   echo "$raw" ;;
-    *)    echo "$PROJECT_DIR/$raw" ;;
+    "~/"*) echo "${HOME}/${raw#"~/"}" ;;
+    /*)    echo "$raw" ;;
+    *)     echo "$PROJECT_DIR/$raw" ;;
   esac
 }
 
