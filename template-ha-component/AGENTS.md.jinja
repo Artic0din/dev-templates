@@ -1,0 +1,82 @@
+# {{ component_friendly_name }}
+
+{{ description }}
+
+Home Assistant custom integration — HACS compatible.
+Solo dev project (@{{ github_user }}). Civilian transition January 2027.
+Australian English. Sydney timezone. AUD.
+
+## Stack
+
+- Python {{ python_version }}
+- Home Assistant {{ home_assistant_min }}+
+- `uv` for env/deps, `ruff` for lint+format, `pyright` for types, `pytest` for tests
+- `pytest-homeassistant-custom-component` for fixtures
+
+## Repository structure
+
+- `custom_components/{{ component_slug }}/` — the integration (init, manifest, config_flow, coordinator, sensor)
+- `tests/` — pytest suites
+- `.github/workflows/` — CI calling `Artic0din/dev-templates/.github/workflows/ci-core-python.yml@v2`
+- `AGENTS.md` — this file, source of truth for AI tools
+- `CLAUDE.md` — symlink to AGENTS.md
+
+## Build & test commands
+
+```
+Pre-push:  uv run ruff check . && uv run pyright && uv run pytest --tb=short -q
+Lint:      uv run ruff check . --fix
+Format:    uv run ruff format .
+Type:      uv run pyright
+Test:      uv run pytest -q
+Coverage:  uv run pytest --cov --cov-report=xml
+```
+
+## Coding conventions
+
+- Async-first. All HA setup methods async.
+- `_LOGGER = logging.getLogger(__name__)` then `_LOGGER.debug/info/warning/error/exception`. Never `print`.
+- Type hints on every public function and class.
+- `@callback` decorator for sync handlers passed to HA.
+- No bare `except:` — specify exception classes (`aiohttp.ClientError`, `asyncio.TimeoutError`, vendor classes).
+- No blocking I/O in event loop. HTTP via `homeassistant.helpers.aiohttp_client.async_get_clientsession(hass)`.
+- DataUpdateCoordinator pattern for polling integrations.
+- Validate config entry data with `voluptuous` on setup.
+- Constants in `const.py`. No magic numbers in business logic.
+
+## Review guidelines
+
+For Codex GitHub App + on-demand Claude Code Action reviewers.
+
+P0 (block merge):
+- Secrets, credentials, tokens in code, comments, or logs
+- Blocking I/O in async event loop (`requests.`, `time.sleep`, sync file ops)
+- Removal of error handling on external API calls
+- Removal of `voluptuous` schema validation on config entry data
+- Hardcoded HA URLs, ports, or user identifiers
+
+P1 (strong fix before merge):
+- Missing tests on new public functions, entities, or coordinator methods
+- Bare `except:` / `except Exception:` without `_LOGGER.exception` or explicit re-raise
+- `# type: ignore` without a `# reason:` comment
+- `print()` in committed code
+- Direct API calls outside the coordinator
+- Public API change without README / manifest.json update
+
+P2 (nit):
+- Naming inconsistencies vs HA conventions (`async_setup_entry`, `_async_update_data`)
+- Dead imports
+- Style drift from this AGENTS.md
+
+## Deploy
+
+This integration ships via HACS. Tag a release on GitHub (`vX.Y.Z`) and HACS pulls automatically.
+Live HA push via `.github/workflows/deploy-live.yml` (SCP + reload API).
+Branch protection: `CI passed` rollup required + Codex review required.
+
+## Out of scope for AI agents
+
+- Do NOT modify `.github/workflows/*` without explicit ask.
+- Do NOT touch `.copier-answers.yml` manually — Copier owns it.
+- Do NOT rewrite git history.
+- Do NOT bundle `ruff format` mass-edits into PRs touching unrelated logic.

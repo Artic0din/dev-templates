@@ -1,0 +1,41 @@
+# {{ component_friendly_name }}
+
+{{ description }}
+
+Home Assistant custom integration. HACS compatible.
+
+## Install
+
+### HACS (recommended)
+
+1. HACS → Integrations → ⋮ → Custom repositories
+2. Add `https://github.com/{{ github_user }}/{{ project_slug }}` as **Integration**
+3. Install **{{ component_friendly_name }}**
+4. Restart Home Assistant
+5. Settings → Devices & Services → Add Integration → search **{{ component_friendly_name }}**
+
+### Manual
+
+```bash
+cd /config/custom_components
+git clone https://github.com/{{ github_user }}/{{ project_slug }} {{ component_slug }}
+# Restart HA
+```
+
+## Configuration
+
+UI-driven via config flow. No YAML required.
+
+## Development
+
+```bash
+uv sync
+uv run pre-commit install
+uv run pytest -q
+```
+
+See [`AGENTS.md`](AGENTS.md) for conventions, build commands, and review guidelines.
+
+## License
+
+{{ license }} — see [`LICENSE`](LICENSE).
