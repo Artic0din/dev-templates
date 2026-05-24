@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="assets/logo-wordmark.png" alt="dev-templates" width="640">
+</p>
+
+<p align="center">
+  <em>Reusable CI templates and discipline scaffolding</em>
+</p>
+
+---
+
 # dev-templates
 
 Discipline stack templates for Ryan's GitHub repos. Three-agent workflow:
