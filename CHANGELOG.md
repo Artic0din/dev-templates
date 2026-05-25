@@ -11,6 +11,15 @@ Historical detail for v1.0.0 – v1.3.0 lives in [ROLLOUT-LEDGER.md](ROLLOUT-LED
 
 ### Added
 
+- **`template-ha-component` expansion** (PR #8). Eight new managed files:
+  - `.github/instructions/python.instructions.md` (path-scoped `**/*.py`)
+  - `.github/instructions/tests.instructions.md` (path-scoped `tests/**`)
+  - `.github/instructions/home-assistant.instructions.md` (path-scoped `custom_components/**`)
+  - `.github/copilot-instructions.md` (thin forwarder to AGENTS.md)
+  - `.github/dependabot.yml` (pip + github-actions w/ grouping per v3 §14)
+  - `codecov.yml` (auto target + 80% patch + `require_changes: true`)
+  - `tests/conftest.py.jinja` (auto-enable custom integrations fixture)
+  - `tests/test_init.py.jinja` (smoke test: `async_setup_entry` + `async_unload_entry`)
 - **`template-python` skeleton** (PR #9). Generic Python project template:
   `AGENTS.md.jinja`, `README.md.jinja`, `pyproject.toml.jinja` (hatchling +
   uv + ruff + pyright + pytest, strict pyright, target-version derived from
