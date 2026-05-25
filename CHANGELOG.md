@@ -9,6 +9,31 @@ Historical detail for v1.0.0 – v1.3.0 lives in [ROLLOUT-LEDGER.md](ROLLOUT-LED
 
 ## [Unreleased]
 
+### Changed
+
+- **`scripts/scaffold-discipline` rewritten as a thin Copier wrapper** (~63 lines vs ~257
+  in v1.3.0). Picks one of the four `template-*` subdirectories and calls
+  `uvx --from "copier>=9.5" copier copy --trust --vcs-ref v2 ...` against
+  `https://github.com/Artic0din/dev-templates.git`. Refuses non-empty destinations
+  (use `copier update` for existing repos). `swift-ios` template intentionally blocked
+  pending a 2nd Swift project. Overridable via `SCAFFOLD_TEMPLATES_REF` /
+  `SCAFFOLD_TEMPLATES_REPO` env vars for testing.
+
+### Removed
+
+- v1.0.x → v1.1.0 file-rename migration logic (v1.3.0 is now the floor).
+- Per-language toolchain prerequisite warnings (moved to Copier `_message_after_copy`
+  and per-template `pyproject.toml.jinja` defaults).
+- File-by-file copy / overwrite logic (Copier owns it now).
+
+### Docs
+
+- README "Scaffold a repo" section rewritten for the v2 Copier flow, including
+  the `copier update` retrofit path and a fallback pointer to the `v1.3.0` tag
+  for unmigrated repos.
+
+## [v2.0.0] — 2026-05-25
+
 ### Added
 
 - **v2 Copier scaffolding** (PR #6). Root `copier.yml` with subdirectory dispatch,
