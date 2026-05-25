@@ -1,0 +1,11 @@
+"""Smoke test for {{ project_name }}."""
+
+from __future__ import annotations
+
+from {{ python_module }} import __version__
+
+
+def test_version_defined() -> None:
+    """Version string is defined and non-empty."""
+    assert isinstance(__version__, str)
+    assert __version__
