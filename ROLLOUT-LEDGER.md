@@ -31,6 +31,12 @@ Columns:
 | `Artic0din/PLNR` (re-do, v1.3.0-rc.1) | v1.3.0-rc.1 | [#142](https://github.com/Artic0din/PLNR/pull/142) | partial | None — workflow started, all 4 jobs ran. | Real lint/typecheck/tests/gitleaks failures in repo code. | Stack validation **PASS** for TS+npm+monorepo path. Repo follow-ups separate. |
 | `Artic0din/Amprage` (scaffold, swift) | v1.3.0-rc.1 | [#1](https://github.com/Artic0din/Amprage/pull/1) | partial | None — workflow started on macos-latest, all 3 jobs ran. `swift test` failed (Amprage uses Xcode project, no `Package.swift`) — real failure, NOT startup_failure. | Test job: `swift test` expects SwiftPM. Lint job: swiftformat/swiftlint findings. Gitleaks: expected on a years-old repo. | Stack validation **PASS** for Swift path. Xcode-project test support is a v1.4 enhancement. |
 
+## v2 baseline
+
+| Tag | Date | Notes |
+|---|---|---|
+| `v2.0.0` | 2026-05-25 | **Copier scaffolding base** (PR #6). `copier.yml` + `template-ha-component` skeleton shipped. Per-language `ci-core-*.yml@v2` carried forward unchanged from v1.3.0. `scripts/scaffold-discipline` rewritten as thin Copier wrapper (~63 lines, PR #7). Floating `v2` tag tracks latest v2.x.y per `pinning policy`. |
+
 ## Excluded from rollout
 
 - **`Artic0din/GridWise`** — no longer actively developed (clean-slate stub).

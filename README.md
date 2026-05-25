@@ -103,16 +103,53 @@ Each caller adds a `ci-passed` rollup job that branch protection requires.
   callers. Callers in production repos pin to `@v1`.
 - Breaking changes bump to `v2` and require explicit caller migration.
 
-## Scaffold a repo
+## Scaffold a repo (v2 — Copier-based)
+
+`scaffold-discipline` is a thin wrapper around [Copier](https://copier.readthedocs.io)
+that scaffolds a new project from one of the `template-*` subdirectories,
+pinned to the `v2` tag of this repo.
 
 ```bash
-~/bin/scaffold-discipline {python|typescript|swift|node}
+scaffold-discipline <template> <dest>
 ```
 
-From inside the target repo. Idempotent — safe to re-run. Migrates v1.0.x
-repos by renaming `.github/instructions/*.md` to `*.instructions.md` and
-stripping Cursor-only frontmatter fields. Generates a caller `ci.yml` that
-invokes the right per-language reusable workflow.
+| Template | Use for |
+|----------|---------|
+| `ha-component` | Home Assistant HACS custom integration |
+| `python` | Generic Python project (uv + ruff + pyright + pytest) |
+| `ts-node` | TypeScript Node project (pnpm + biome + vitest) |
+| `swift-ios` | _deferred_ until a 2nd Swift project exists |
+
+Generated repos get `AGENTS.md` (Codex P0/P1 review guidelines),
+`.copier-answers.yml` (managed by Copier), `pyproject.toml` / `package.json` /
+manifest as appropriate, `.pre-commit-config.yaml`, and a `ci.yml` caller
+that targets the matching `ci-core-{language}.yml@v2` reusable workflow.
+
+### Update an existing v2 repo when the template evolves
+
+From inside the existing project:
+
+```bash
+uvx --from "copier>=9.5" copier update --trust
+```
+
+Copier reads `.copier-answers.yml`, diffs the template against the recorded
+answers, and presents conflicts inline (git-style `<<<<<<<` markers). Resolve
+like any merge conflict.
+
+`_skip_if_exists` protects `AGENTS.md`, `pyproject.toml`, `package.json`, and
+similar files you may have customised — those are never clobbered.
+
+### Legacy v1.3.0 flow
+
+The v1.3.0 shell-based scaffold is no longer the wrapper's entry point. If
+you need it for a repo that hasn't been migrated to Copier yet, check out the
+`v1.3.0` tag explicitly:
+
+```bash
+git -C /tmp clone --branch v1.3.0 https://github.com/Artic0din/dev-templates v1
+/tmp/v1/scripts/scaffold-discipline python  # from inside the target repo
+```
 
 ## Pinning policy
 
