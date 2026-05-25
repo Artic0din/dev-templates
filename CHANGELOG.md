@@ -9,6 +9,20 @@ Historical detail for v1.0.0 – v1.3.0 lives in [ROLLOUT-LEDGER.md](ROLLOUT-LED
 
 ## [Unreleased]
 
+### Added
+
+- **`template-python` skeleton** (PR #9). Generic Python project template:
+  `AGENTS.md.jinja`, `README.md.jinja`, `pyproject.toml.jinja` (hatchling +
+  uv + ruff + pyright + pytest, strict pyright, target-version derived from
+  `python_version` answer), `.pre-commit-config.yaml`, `.gitignore`,
+  `src/{{ python_module }}/__init__.py.jinja`, `tests/__init__.py`,
+  `tests/test_smoke.py.jinja`, `.github/workflows/ci.yml.jinja` calling
+  `ci-core-python.yml@v2`, `.github/instructions/{python,tests}.instructions.md`,
+  `.github/copilot-instructions.md` (thin forwarder), `.github/dependabot.yml`
+  (pip + actions grouping), `codecov.yml`.
+- New `python_module` question in root `copier.yml`, defaulted to
+  `{{ project_slug | replace('-', '_') }}`, gated to `template-python`.
+
 ### Changed
 
 - **`scripts/scaffold-discipline` rewritten as a thin Copier wrapper** (~63 lines vs ~257

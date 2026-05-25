@@ -80,6 +80,12 @@ home_assistant_min:
   default: "2026.4.0"
   when: "{{ _template_subdirectory == 'template-ha-component' }}"
 
+python_module:
+  type: str
+  default: "{{ project_slug | replace('-', '_') }}"
+  help: "Python package name for generic Python projects (lowercase + underscores)"
+  when: "{{ _template_subdirectory == 'template-python' }}"
+
 # Post-generation tasks (Copier 9.x requires --trust to run these)
 _tasks:
   - command: "git init -b main"
